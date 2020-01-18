@@ -1,23 +1,22 @@
 (** We store the list of elts from offset off0 (say); the nxt pointer
-   takes up the first off0 bytes. Assumes max size of marshalled blk_ptr
-   is off0 bytes *)
+   takes up the first off0 bytes. Assumes max size of marshalled
+   blk_ptr is off0 bytes.
+
+    When an elt is added, we marshal to buffer immediately (same for
+   nxt pointer). Only when we write to disk do we update the buffer
+   with the None pointer.
+
+
+  *)
 open Plist_intf
 
 [@@@warning "-26"] (* FIXME *)
 
-type ('a,'blk_id,'blk,'buf) marshal_info = {
-  max_elt_sz    :int;
-  (** max size of a marshalled elt option *)
-  max_blk_id_sz :int;
-  (** max size of a marshalled blk_id option *)
-  m_elt         : 'a option -> 'buf*int -> 'buf*int;
-  u_elt         : 'buf -> int -> 'a option * int;
-  (** None denotes end of list *)
-  m_blk_id      : 'blk_id option -> 'buf*int -> 'buf*int;
-  u_blk_id      : 'buf -> int -> 'blk_id option*int;
-  blk_to_buf: 'blk -> 'buf;
-  buf_to_blk: 'buf -> 'blk
-  
+type ('a,'blk_id,'blk,'buf,'t) ret_ = {
+  m_u_ops: ('a, 'blk_id, 'blk) plist_marshal_ops;
+  create_plist: ('blk_id -> (('a, 'blk_id, 'buf) plist, 't) m);
+  add_sync: ((('a, 'blk_id, 'buf) plist, 't) with_state ->
+        (nxt:'blk_id -> elt:'a -> ('blk_id option, 't) m) * (unit -> (unit, 't) m))
 }
 
 module Make(S:sig 
@@ -45,10 +44,15 @@ module Make(S:sig
       let buf_sz = Blk_sz.to_int blk_sz in
       let buf_space ~off = buf_sz - off in
       let can_fit ~off ~n = off+n<=buf_sz in
-      
+
       let elts_offset0 = max_blk_id_sz in
       assert(can_fit ~off:elts_offset0 ~n:(2*max_elt_sz)); 
       (* can fit 2 elts at least - including the None end of list marker *)
+
+
+      (* we need to fit an elt and a None list terminator *)
+      let can_fit_elt off = can_fit ~off ~n:(2*max_elt_sz) in
+
 
       let empty_blk () = String.make buf_sz chr0 |> of_string in
 
@@ -59,7 +63,7 @@ module Make(S:sig
         (buf,0) |> m_blk_id nxt |> fun (buf,i) -> 
         assert(i<=max_blk_id_sz);
         (buf,elts_offset0,elts) |> iter_k (fun ~k (buf,off,elts) ->
-            assert(can_fit ~off ~n:max_elt_sz);
+            assert(can_fit_elt off);
             match elts with 
             | [] -> 
               (* note the use of the offset just before the None *)
@@ -68,7 +72,7 @@ module Make(S:sig
                 (buf,off) |> m_elt (Some e) |> fun (buf,off) -> 
                 k (buf,off,elts)))
       in
-      
+
       let buf_to_x buf = 
         0 |> u_blk_id buf |> fun (nxt,_) -> 
         (elts_offset0,[]) |> iter_k (fun ~k (off,acc) -> 
@@ -109,25 +113,29 @@ module Make(S:sig
         write ~blk_id ~blk
       in
 
+      let add_elt_list_terminator off buf = 
+        (buf,off) |> m_elt None |> fun (buf,_) -> 
+        buf
+      in
+
       (* invariant: if tl not written to disk yet, then tl_dirty is true *)
-      let sync_tl ~state = 
-        let { tl; buffer; dirty; _ } = state in
+      let sync ~state = 
+        let { tl; buffer=buf; dirty; off; _ } = state in
         match dirty with
-          | true -> (
-              write ~blk_id:tl ~blk:(buf_to_blk buffer) >>= fun () ->
-              return {state with dirty=false })
-          | false -> return state
+        | true -> (
+            (* marshal None at off *)
+            add_elt_list_terminator off buf |> fun buf ->
+            write ~blk_id:tl ~blk:(buf_to_blk buf) >>= fun () ->
+            return {state with dirty=false })
+        | false -> return state
       in
 
       (* add element in tl; don't use blk_dev *)
       let add_elt ~state ~elt = 
         let buf,off = state.buffer,state.off in
-        assert(can_fit ~off ~n:(2*max_elt_sz));
-        (* write an elt followed by a None, and update the pointer offset *)
+        assert(can_fit_elt off);
+        (* write an elt and update the pointer offset *)
         (buf,off) |> m_elt (Some elt) |> fun (buf,off) -> 
-        (buf,off) |> m_elt None |> fun (buf,_) -> 
-        (* note the offset is just before the none; FIXME maybe can
-           optimize by only writing None once per blk *)
         {state with buffer=buf; off; dirty=true}
       in
 
@@ -136,7 +144,7 @@ module Make(S:sig
         (* update nxt first *)
         (buf,0) |> m_blk_id nxt |> fun (buf,_) -> 
         buf
-      in        
+      in
 
       (* don't use blk_dev *)
       let move_to_nxt ~hd ~nxt ~buf ~off ~dirty =
@@ -148,34 +156,70 @@ module Make(S:sig
         fun ~(with_state:(('a,blk_id,buf)plist,t) with_state) ->
         fun ~nxt ~elt ->
           with_state.with_state (fun ~state ~set_state ->
-            let { off; _ } = state in
-            match can_fit ~off ~n:(2*max_elt_sz) with
-            | true -> (
-                add_elt ~state ~elt |> fun state ->
-                set_state state >>= fun () ->
-                return (Some nxt))
-            | false -> (
-                (* write the new blk first *)
-                x_to_buf ([elt],None) |> fun (buf,off) ->
-                write ~blk_id:nxt ~blk:(buf_to_blk buf) >>= fun () ->
-                (* write old blk with nxt *)
-                let blk_id = state.tl in
-                write ~blk_id ~blk:(state.buffer |> set_nxt (Some nxt) |> buf_to_blk) >>= fun () ->
-                move_to_nxt ~hd:state.hd ~nxt ~buf ~off ~dirty:false |> fun state ->
-                set_state state >>= fun () ->
-                return None))
+              let { off; _ } = state in
+              match can_fit ~off ~n:(2*max_elt_sz) with
+              | true -> (
+                  add_elt ~state ~elt |> fun state ->
+                  set_state state >>= fun () ->
+                  return (Some nxt))
+              | false -> (
+                  (* write the new blk first *)
+                  x_to_buf ([elt],None) |> fun (buf,off) ->
+                  write ~blk_id:nxt ~blk:(buf_to_blk buf) >>= fun () ->
+                  (* write old blk with nxt *)
+                  let blk_id = state.tl in
+                  let buf' = state.buffer |> set_nxt (Some nxt)
+                             |> add_elt_list_terminator state.off
+                  in
+                  write ~blk_id ~blk:(buf' |> buf_to_blk) >>= fun () ->
+                  move_to_nxt ~hd:state.hd ~nxt ~buf ~off ~dirty:false 
+                  |> set_state >>= fun () ->
+                  return None))
       in
-      let ret = ops1,create_plist,fun with_state -> add ~with_state in
+      let sync =
+        fun ~(with_state:(('a,blk_id,buf)plist,t) with_state) ->
+        fun () ->
+          with_state.with_state (fun ~state ~set_state ->
+              let { tl=blk_id; buffer=buf; off; dirty; _ } = state in
+              buf |> add_elt_list_terminator off |> fun buf ->
+              write ~blk_id ~blk:(buf_to_blk buf) >>= fun () ->
+              set_state {state with buffer=buf; dirty=false})
+      in
+
+      let ret = ops1,create_plist,fun with_state -> add ~with_state,sync ~with_state in
       ret
 
-  let _ : monad_ops:t monad_ops ->
+  let _ : 
+monad_ops:t monad_ops ->
 buf_ops:buf buf_ops ->
 blk_ops:blk blk_ops ->
 blk_dev_ops:(blk_id, blk, t) blk_dev_ops ->
-marshal_info:('b, blk_id, blk, buf) marshal_info ->
+marshal_info:('b, blk_id, blk, buf) plist_marshal_info ->
 ('b, blk_id, blk) plist_marshal_ops *
 (blk_id -> (('c, blk_id, buf) plist, t) m) *
 ((('a, blk_id, buf) plist, t) with_state ->
- nxt:blk_id -> elt:'b -> (blk_id option, t) m) = make
+ (nxt:blk_id -> elt:'b -> (blk_id option, t) m) * (unit -> (unit, t) m)) = make
+
+  let make ~monad_ops ~buf_ops ~blk_ops ~blk_dev_ops ~marshal_info =
+    make ~monad_ops ~buf_ops ~blk_ops ~blk_dev_ops ~marshal_info 
+    |> fun (m_u_ops,create_plist,add_sync) -> {m_u_ops;create_plist;add_sync}
 end
+
+let make (type buf blk_id blk t) ~monad_ops = 
+  let module S = struct
+    type nonrec buf = buf
+    type nonrec blk_id = blk_id
+    type nonrec blk = blk
+    type nonrec t = t
+  end
+  in
+  let module T = Make(S) in
+  T.make ~monad_ops
+
+let make : monad_ops:'t monad_ops ->
+buf_ops:'buf buf_ops ->
+blk_ops:'blk blk_ops ->
+blk_dev_ops:('blk_id, 'blk, 't) blk_dev_ops ->
+marshal_info:('a, 'blk_id, 'blk, 'buf) plist_marshal_info ->
+('a, 'blk_id, 'blk, 'buf, 't) ret_ = make
 

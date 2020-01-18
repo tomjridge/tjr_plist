@@ -23,8 +23,8 @@ type ('a,'buf,'blk_id,'blk,'t) plist_init_ops = {
 }
 
 type ('a,'buf,'blk_id,'blk,'t) plist_ops = {  
-  add     : nxt:'blk_id -> elt:'a -> ('blk_id option,'t) m;
-  sync_tl : unit -> (unit,'t)m; 
+  add  : nxt:'blk_id -> elt:'a -> ('blk_id option,'t) m;
+  sync : unit -> (unit,'t)m; 
 }
 (** add : The blk_id is returned if it is not used; another variant
    assumes an alloc function. We don't assume the nxt_blk is clean -
@@ -44,3 +44,27 @@ sync_tl : we automatically sync before moving to a new tl
   (* Used to initialize the nxt block *)
   (* initialize_blk: 'blk_id -> 'a list -> (unit,'t)m; *)
 
+
+module Plist_marshal_info = struct
+  type ('a,'blk_id,'blk,'buf) plist_marshal_info = {
+    max_elt_sz    :int;
+    max_blk_id_sz :int;
+    m_elt         : 'a option -> 'buf*int -> 'buf*int;
+    u_elt         : 'buf -> int -> 'a option * int;
+    m_blk_id      : 'blk_id option -> 'buf*int -> 'buf*int;
+    u_blk_id      : 'buf -> int -> 'blk_id option*int;
+    blk_to_buf: 'blk -> 'buf;
+    buf_to_blk: 'buf -> 'blk  
+  }
+(**
+
+   We write an elt e as "marshal(Some e)" and the end-of-list marker as
+   "marshal(None)"
+
+   - max_elt_sz: max size of a marshalled elt option
+
+   - max_blk_id_sz: max size of a marshalled blk_id option
+
+*)
+end
+include Plist_marshal_info
