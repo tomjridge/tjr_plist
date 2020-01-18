@@ -36,7 +36,7 @@ module Make(S:sig
     ->
       let ( >>= ) = monad_ops.bind in
       let return = monad_ops.return in
-      let { create;get;len} = buf_ops in
+      let { create;get;len; _} = buf_ops in
       let { blk_sz;of_bytes;to_bytes;of_string;_ } = blk_ops in
       let { write; _ } = blk_dev_ops in
       let { max_elt_sz; max_blk_id_sz; m_elt; u_elt; 
