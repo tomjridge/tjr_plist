@@ -6,7 +6,7 @@ default: all
 -include Makefile.ocaml
 
 run:
-	time $(DUNE) exec main
+	time $(DUNE) exec plist_test
 
 # for auto-completion of Makefile target
 clean::

@@ -46,6 +46,7 @@ module Make(S:sig
       let can_fit ~off ~n = off+n<=buf_sz in
 
       let elts_offset0 = max_blk_id_sz in
+      assert(blk_sz = blk_sz_4096);
       assert(can_fit ~off:elts_offset0 ~n:(2*max_elt_sz)); 
       (* can fit 2 elts at least - including the None end of list marker *)
 
