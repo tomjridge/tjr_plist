@@ -31,8 +31,10 @@ let m_any max_sz (x:'a) (buf,off) =
   (buf,off+n)
 
 let u_any buf off : 'a * int = 
+  (* Printf.printf "Reading at offset %d\n" off; *)
   let i : 'a = Marshal.from_bytes buf off in
-  (* FIXME Marshal should have a from_buffer which returns value and number of bytes consumed *)
+  (* FIXME Marshal should have a from_buffer which returns value and
+     number of bytes consumed *)
   let n = Marshal.total_size buf off in
   (i,off+n)
 
@@ -42,6 +44,8 @@ module Int_plist = struct
   let max_sz = 32
 
   (* FIXME these max sizes are guessed upper bounds *)
+  (* TODO we also need a version with bin_prot marshalling, for size
+     and speed *)
   let marshal_info : (int,blk_id,blk,buf)plist_marshal_info = {
     max_elt_sz=max_sz;
     max_blk_id_sz=max_sz;
@@ -77,7 +81,9 @@ end = struct
 
   let _ = int_plist
 
-  let Make_.{ m_u_ops=_; create_plist; add_sync } = int_plist
+  let Make_.{ m_u_ops=_; create_plist; read_plist; add_sync } = int_plist
+
+  let num_elts = 10_000
 
   let main () = 
     create_plist (Blk_id_as_int.of_int 0) >>= fun plist -> 
@@ -88,10 +94,12 @@ end = struct
       in
       {with_state}
     in
-    let (add,_sync) = add_sync with_state in
+    let (add,sync) = add_sync with_state in
     (1,0) |> iter_k (fun ~k (min_free_blk_id,n) -> 
-        match n > 10000 with
-        | true -> return min_free_blk_id
+        match n >= num_elts with
+        | true -> 
+          (* NOTE make sure the last block is actually written *)
+          sync () >>= fun () -> return min_free_blk_id
         | false -> 
           add
             ~nxt:(Blk_id_as_int.of_int min_free_blk_id)
@@ -101,7 +109,12 @@ end = struct
           | None -> k (min_free_blk_id+1,n+1)
           | Some _ -> k (min_free_blk_id,n+1))
     >>= fun min_free_blk_id -> 
+    
     Printf.printf "Finished with next free blk: %d\n" min_free_blk_id;
+    read_plist (Blk_id_as_int.of_int 0) >>= fun xs ->
+    xs |> List.map (fun (elts,nxt_) -> elts) |> List.concat |> fun xs ->
+    Printf.printf "Read %d elts from disk\n" (List.length xs);
+    assert(num_elts = List.length xs);
     return ()
 
   let _ = main

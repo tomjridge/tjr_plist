@@ -13,9 +13,10 @@ open Plist_intf
 [@@@warning "-26"] (* FIXME *)
 
 type ('a,'blk_id,'blk,'buf,'t) ret_ = {
-  m_u_ops: ('a, 'blk_id, 'blk) plist_marshal_ops;
-  create_plist: ('blk_id -> (('a, 'blk_id, 'buf) plist, 't) m);
-  add_sync: ((('a, 'blk_id, 'buf) plist, 't) with_state ->
+  m_u_ops      : ('a, 'blk_id, 'blk) plist_marshal_ops;
+  create_plist : ('blk_id -> (('a, 'blk_id, 'buf) plist, 't) m);
+  read_plist   : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m;
+  add_sync     : ((('a, 'blk_id, 'buf) plist, 't) with_state ->
         (nxt:'blk_id -> elt:'a -> ('blk_id option, 't) m) * (unit -> (unit, 't) m))
 }
 
@@ -38,7 +39,7 @@ module Make(S:sig
       let return = monad_ops.return in
       let { create;get;len; _} = buf_ops in
       let { blk_sz;of_bytes;to_bytes;of_string;_ } = blk_ops in
-      let { write; _ } = blk_dev_ops in
+      let { write; read; _ } = blk_dev_ops in
       let { max_elt_sz; max_blk_id_sz; m_elt; u_elt; 
             m_blk_id; u_blk_id; blk_to_buf; buf_to_blk } = marshal_info in
       let buf_sz = Blk_sz.to_int blk_sz in
@@ -105,6 +106,17 @@ module Make(S:sig
         let blk = buf_to_blk buf in
         write ~blk_id ~blk >>= fun () ->
         return {pl with dirty=false}
+      in
+
+      let read_plist blk_id = 
+        (blk_id,[]) |> iter_k (fun ~k (blk_id,acc) -> 
+            read ~blk_id >>= fun blk ->
+            blk_to_x blk |> fun (elts,nxt) ->
+            match nxt with 
+            | None -> 
+              let acc = (elts,nxt)::acc in
+              return (List.rev acc)
+            | Some nxt -> k (nxt,(elts,Some nxt)::acc))
       in
 
       (* working with_state *)
@@ -187,7 +199,7 @@ module Make(S:sig
               set_state {state with buffer=buf; dirty=false})
       in
 
-      let ret = ops1,create_plist,fun with_state -> add ~with_state,sync ~with_state in
+      let ret = ops1,create_plist,read_plist,fun with_state -> add ~with_state,sync ~with_state in
       ret
 
   let _ : 
@@ -198,12 +210,15 @@ blk_dev_ops:(blk_id, blk, t) blk_dev_ops ->
 marshal_info:('b, blk_id, blk, buf) plist_marshal_info ->
 ('b, blk_id, blk) plist_marshal_ops *
 (blk_id -> (('c, blk_id, buf) plist, t) m) *
+(blk_id -> (('b list * blk_id option) list, t) m) *
 ((('a, blk_id, buf) plist, t) with_state ->
- (nxt:blk_id -> elt:'b -> (blk_id option, t) m) * (unit -> (unit, t) m)) = make
+ (nxt:blk_id -> elt:'b -> (blk_id option, t) m) * (unit -> (unit, t) m)) 
+= make
 
   let make ~monad_ops ~buf_ops ~blk_ops ~blk_dev_ops ~marshal_info =
     make ~monad_ops ~buf_ops ~blk_ops ~blk_dev_ops ~marshal_info 
-    |> fun (m_u_ops,create_plist,add_sync) -> {m_u_ops;create_plist;add_sync}
+    |> fun (m_u_ops,create_plist,read_plist,add_sync) -> 
+    {m_u_ops;create_plist;read_plist;add_sync}
 end
 
 let make (type buf blk_id blk t) ~monad_ops = 
