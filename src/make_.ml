@@ -68,6 +68,7 @@ module Make(S:sig
                 k (buf,off,elts)))
       in
 
+      (* FIXME this assumes that the buf has a trailing None *)
       let buf_to_x buf = 
         0 |> u_blk_id buf |> fun (nxt,_) -> 
         (elts_offset0,[]) |> iter_k (fun ~k (off,acc) -> 

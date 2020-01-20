@@ -31,7 +31,7 @@ let m_any max_sz (x:'a) (buf,off) =
   (buf,off+n)
 
 let u_any buf off : 'a * int = 
-  (* Printf.printf "Reading at offset %d\n" off; *)
+  Printf.printf "Reading at offset %d\n" off;
   let i : 'a = Marshal.from_bytes buf off in
   (* FIXME Marshal should have a from_buffer which returns value and
      number of bytes consumed *)
@@ -57,8 +57,22 @@ module Int_plist = struct
     buf_to_blk=(fun x -> x);
   }
 
+  (* NOTE this gets filled in later, once we have the blk/buf
+     marshalling function *)
+  let check_blk = ref (fun buf -> true)
+
   let make with_mem = 
     let blk_dev_ops = blk_dev_ops with_mem in
+    let write ~blk_id ~blk = 
+      assert(!check_blk blk);
+      blk_dev_ops.write ~blk_id ~blk
+    in
+    let read ~blk_id = 
+      blk_dev_ops.read ~blk_id >>= fun blk ->
+      assert(!check_blk blk);
+      return blk
+    in
+    let blk_dev_ops = { blk_dev_ops with read; write } in
     make ~monad_ops ~buf_ops ~blk_ops ~blk_dev_ops ~marshal_info
 
   let _ = make
@@ -81,7 +95,10 @@ end = struct
 
   let _ = int_plist
 
-  let { m_u_ops=_; extra_ops={create_plist; read_plist}; plist_ops=add_sync } = int_plist
+  let { m_u_ops; extra_ops={create_plist; read_plist}; plist_ops=add_sync } = int_plist
+
+  let _ = 
+    Int_plist.check_blk := (fun blk -> let _ = m_u_ops.unmarshal blk in true)
 
   let num_elts = 10_000
 
@@ -99,7 +116,8 @@ end = struct
         match n >= num_elts with
         | true -> 
           (* NOTE make sure the last block is actually written *)
-          sync () >>= fun () -> return min_free_blk_id
+          (* sync () >>= fun () ->  *)
+          return min_free_blk_id
         | false -> 
           add
             ~nxt:(Blk_id_as_int.of_int min_free_blk_id)
@@ -108,8 +126,7 @@ end = struct
           match x with 
           | None -> k (min_free_blk_id+1,n+1)
           | Some _ -> k (min_free_blk_id,n+1))
-    >>= fun min_free_blk_id -> 
-    
+    >>= fun min_free_blk_id ->     
     Printf.printf "Finished with next free blk: %d\n" min_free_blk_id;
     read_plist (Blk_id_as_int.of_int 0) >>= fun xs ->
     xs |> List.map (fun (elts,nxt_) -> elts) |> List.concat |> fun xs ->
