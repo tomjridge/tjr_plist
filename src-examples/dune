@@ -3,6 +3,7 @@
 
 (library
   (public_name "tjr_plist_examples")
+  (preprocess (pps ppx_deriving_yojson ppx_bin_prot ppx_jane))
   (libraries tjr_plist)
 )
 

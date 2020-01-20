@@ -13,7 +13,7 @@
 (package 
          (name tjr_plist)
          (synopsis "A persistent (on-disk) list")
-         (depends ocamlfind dune tjr_fs_shared)
+         (depends ocamlfind dune tjr_fs_shared ppx_jane)
 )
 
 
