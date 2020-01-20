@@ -2,7 +2,7 @@ open Tjr_plist
 open Plist_intf
 
 type blk_id = Blk_id_as_int.blk_id
-type blk = bytes
+type blk = bytes (* NOTE we must take care to copy the bytes when writing to disk *)
 type buf = Buf_as_bytes.by_buf
 
 let make = make
@@ -31,7 +31,7 @@ let m_any max_sz (x:'a) (buf,off) =
   (buf,off+n)
 
 let u_any buf off : 'a * int = 
-  Printf.printf "Reading at offset %d\n" off;
+  (* Printf.printf "Reading at offset %d\n" off; *)
   let i : 'a = Marshal.from_bytes buf off in
   (* FIXME Marshal should have a from_buffer which returns value and
      number of bytes consumed *)
@@ -54,25 +54,25 @@ module Int_plist = struct
     m_blk_id=m_any max_sz;
     u_blk_id=u_any;
     blk_to_buf=(fun x -> x);
-    buf_to_blk=(fun x -> x);
+    buf_to_blk=(fun x -> Bytes.copy x);
   }
 
   (* NOTE this gets filled in later, once we have the blk/buf
      marshalling function *)
-  let check_blk = ref (fun buf -> true)
+  (* let check_blk = ref (fun buf -> true) *)
 
   let make with_mem = 
     let blk_dev_ops = blk_dev_ops with_mem in
-    let write ~blk_id ~blk = 
-      assert(!check_blk blk);
-      blk_dev_ops.write ~blk_id ~blk
-    in
-    let read ~blk_id = 
-      blk_dev_ops.read ~blk_id >>= fun blk ->
-      assert(!check_blk blk);
-      return blk
-    in
-    let blk_dev_ops = { blk_dev_ops with read; write } in
+    (* let write ~blk_id ~blk = 
+     *   assert(!check_blk blk);
+     *   blk_dev_ops.write ~blk_id ~blk
+     * in
+     * let read ~blk_id = 
+     *   blk_dev_ops.read ~blk_id >>= fun blk ->
+     *   assert(!check_blk blk);
+     *   return blk
+     * in
+     * let blk_dev_ops = { blk_dev_ops with read; write } in *)
     make ~monad_ops ~buf_ops ~blk_ops ~blk_dev_ops ~marshal_info
 
   let _ = make
@@ -95,10 +95,10 @@ end = struct
 
   let _ = int_plist
 
-  let { m_u_ops; extra_ops={create_plist; read_plist}; plist_ops=add_sync } = int_plist
+  let { m_u_ops=_; extra_ops={create_plist; read_plist}; plist_ops=add_sync } = int_plist
 
-  let _ = 
-    Int_plist.check_blk := (fun blk -> let _ = m_u_ops.unmarshal blk in true)
+  (* let _ = 
+   *   Int_plist.check_blk := (fun blk -> let _ = m_u_ops.unmarshal blk in true) *)
 
   let num_elts = 10_000
 
@@ -116,7 +116,7 @@ end = struct
         match n >= num_elts with
         | true -> 
           (* NOTE make sure the last block is actually written *)
-          (* sync () >>= fun () ->  *)
+          sync () >>= fun () ->
           return min_free_blk_id
         | false -> 
           add
