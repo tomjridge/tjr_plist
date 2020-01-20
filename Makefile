@@ -8,5 +8,8 @@ default: all
 run:
 	time $(DUNE) exec plist_test
 
+# for emacs completion
+promote_docs::
+
 # for auto-completion of Makefile target
 clean::

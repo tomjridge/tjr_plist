@@ -12,13 +12,6 @@ open Plist_intf
 
 [@@@warning "-26"] (* FIXME *)
 
-type ('a,'blk_id,'blk,'buf,'t) ret_ = {
-  m_u_ops      : ('a, 'blk_id, 'blk) plist_marshal_ops;
-  create_plist : ('blk_id -> (('a, 'blk_id, 'buf) plist, 't) m);
-  read_plist   : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m;
-  add_sync     : ((('a, 'blk_id, 'buf) plist, 't) with_state ->
-        (nxt:'blk_id -> elt:'a -> ('blk_id option, 't) m) * (unit -> (unit, 't) m))
-}
 
 module Make(S:sig 
     type buf
@@ -91,7 +84,7 @@ module Make(S:sig
       in
       let blk_to_x blk = blk_to_buf blk |> buf_to_x in      
 
-      let ops1 = { unmarshal=blk_to_x; marshal=x_to_blk } in
+      let m_u_ops = { unmarshal=blk_to_x; marshal=x_to_blk } in
 
       let create_plist blk_id = 
         x_to_buf ([],None) |> fun (buf,off) -> 
@@ -118,6 +111,8 @@ module Make(S:sig
               return (List.rev acc)
             | Some nxt -> k (nxt,(elts,Some nxt)::acc))
       in
+
+      let extra_ops = { create_plist; read_plist } in
 
       (* working with_state *)
 
@@ -199,28 +194,13 @@ module Make(S:sig
               set_state {state with buffer=buf; dirty=false})
       in
 
-      let ret = ops1,create_plist,read_plist,fun with_state -> add ~with_state,sync ~with_state in
+      let ret = { m_u_ops; extra_ops; plist_ops=fun with_state -> { add=add ~with_state; sync=sync ~with_state } } in
       ret
 
-  let _ : 
-monad_ops:t monad_ops ->
-buf_ops:buf buf_ops ->
-blk_ops:blk blk_ops ->
-blk_dev_ops:(blk_id, blk, t) blk_dev_ops ->
-marshal_info:('b, blk_id, blk, buf) plist_marshal_info ->
-('b, blk_id, blk) plist_marshal_ops *
-(blk_id -> (('c, blk_id, buf) plist, t) m) *
-(blk_id -> (('b list * blk_id option) list, t) m) *
-((('a, blk_id, buf) plist, t) with_state ->
- (nxt:blk_id -> elt:'b -> (blk_id option, t) m) * (unit -> (unit, t) m)) 
-= make
-
-  let make ~monad_ops ~buf_ops ~blk_ops ~blk_dev_ops ~marshal_info =
-    make ~monad_ops ~buf_ops ~blk_ops ~blk_dev_ops ~marshal_info 
-    |> fun (m_u_ops,create_plist,read_plist,add_sync) -> 
-    {m_u_ops;create_plist;read_plist;add_sync}
+  let _ = make
 end
 
+(**/**)
 let make (type buf blk_id blk t) ~monad_ops = 
   let module S = struct
     type nonrec buf = buf
@@ -231,6 +211,7 @@ let make (type buf blk_id blk t) ~monad_ops =
   in
   let module T = Make(S) in
   T.make ~monad_ops
+(**/**)
 
 let make : monad_ops:'t monad_ops ->
 buf_ops:'buf buf_ops ->

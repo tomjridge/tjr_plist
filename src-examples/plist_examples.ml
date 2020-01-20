@@ -81,7 +81,7 @@ end = struct
 
   let _ = int_plist
 
-  let Make_.{ m_u_ops=_; create_plist; read_plist; add_sync } = int_plist
+  let { m_u_ops=_; extra_ops={create_plist; read_plist}; plist_ops=add_sync } = int_plist
 
   let num_elts = 10_000
 
@@ -94,7 +94,7 @@ end = struct
       in
       {with_state}
     in
-    let (add,sync) = add_sync with_state in
+    let {add;sync} = add_sync with_state in
     (1,0) |> iter_k (fun ~k (min_free_blk_id,n) -> 
         match n >= num_elts with
         | true -> 
