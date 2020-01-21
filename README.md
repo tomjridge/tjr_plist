@@ -19,3 +19,18 @@ The library `tjr_plist_examples` contains examples.
 
 The executable `plist_test` tests basic functionality using OCaml
 marshalling and an in-memory blk device.
+
+
+~~~
+make -k run 
+time dune exec plist_test
+Finished with next free blk: 60
+Read 10000 elts from disk
+Finished with next free blk: 10
+Read 10000 elts from disk
+Timings: p1:3738187 p2:1020253
+
+real	0m0.089s
+user	0m0.073s
+sys	0m0.015s
+~~~

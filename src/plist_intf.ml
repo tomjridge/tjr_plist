@@ -5,7 +5,7 @@ type ('a,'blk_id,'buf) plist = {
   tl             : 'blk_id;
   buffer      : 'buf;
   off         : int;
-  nxt_is_none : bool; 
+  (* nxt_is_none : bool;  *)
   dirty       : bool; (** may not have been written to disk *)
 }
 (** This is an internal implementation type.
@@ -20,15 +20,30 @@ type ('a,'blk_id,'blk) plist_marshal_ops = {
 
 (** Operations which don't require the plist state; typically
    initialization and debugging *)
-type ('a,'buf,'blk_id,'blk,'t) plist_extra_ops = {  
+type ('a,'buf,'blk_id,'t) plist_extra_ops = {  
   create_plist : 'blk_id -> (('a,'blk_id,'buf)plist,'t)m;
   read_plist   : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m;
 }
 
+type ('a,'blk_id,'blk) adv_hd = {
+  old_hd  :'blk_id;
+  old_blk :'a list;
+  new_hd  :'blk_id
+}
+
+type 'a or_error = ('a,unit) result
+
 (** plist operations which require the plist state from the monad *)
 type ('a,'buf (* FIXME *),'blk_id,'blk,'t) plist_ops = {
-  add  : nxt:'blk_id -> elt:'a -> ('blk_id option,'t) m;
-  sync : unit -> (unit,'t)m; 
+  add       : nxt:'blk_id -> elt:'a -> ('blk_id option,'t) m;
+  sync      : unit -> (unit,'t)m;
+(*  blk_len   : unit -> (int,'t)m;
+  adv_hd    : unit -> ( ('a,'blk_id,'blk) adv_hd or_error,'t)m; (** advance hd *)
+  adv_tl    : 'blk_id -> (unit,'t)m;
+  get_hd_tl : unit -> ('blk_id * 'blk_id,'t)m;
+  read_hd   : unit -> ('a list * 'blk_id option,'t)m;
+  read_tl   : unit -> ('a list * 'blk_id option,'t)m;
+  read_blk  : 'blk_id -> (('a list * 'blk_id option)or_error,'t)m*)
 }
 (** add : The blk_id is returned if it is not used; another variant
    assumes an alloc function. We don't assume the nxt_blk is clean -
@@ -36,6 +51,10 @@ type ('a,'buf (* FIXME *),'blk_id,'blk,'t) plist_ops = {
    updating the nxt pointer.
 
 sync : we automatically sync before moving to a new tl; this is for partial blocks which we need to sync
+
+adv_hd: return an error if no nxt pointer (iff blk_len = 1 iff hd=tl)
+
+read_blk: we expect to be called on a blk_id that can be unmarshalled (ie one that is part of some plist)
 *)
 
 module Plist_marshal_info = struct
@@ -67,7 +86,7 @@ include Plist_marshal_info
 module Ret_ = struct
   type ('a,'blk_id,'blk,'buf,'t) ret_ = {
     m_u_ops      : ('a, 'blk_id, 'blk) plist_marshal_ops;
-    extra_ops    : ('a,'buf,'blk_id,'blk,'t) plist_extra_ops;
+    extra_ops    : ('a,'buf,'blk_id,'t) plist_extra_ops;
     plist_ops    : (('a, 'blk_id, 'buf) plist, 't) with_state ->
       ('a,'buf,'blk_id,'blk,'t) plist_ops
   }

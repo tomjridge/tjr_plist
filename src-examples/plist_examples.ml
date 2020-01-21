@@ -64,26 +64,27 @@ module Blk_as_bytes_buf_as_bytes = struct
        marshalling function *)
     (* let check_blk = ref (fun buf -> true) *)
 
-    let make with_mem = 
-      let blk_dev_ops = blk_dev_ops with_mem in
-      (* let write ~blk_id ~blk = 
-       *   assert(!check_blk blk);
-       *   blk_dev_ops.write ~blk_id ~blk
-       * in
-       * let read ~blk_id = 
-       *   blk_dev_ops.read ~blk_id >>= fun blk ->
-       *   assert(!check_blk blk);
-       *   return blk
-       * in
-       * let blk_dev_ops = { blk_dev_ops with read; write } in *)
-      make ~monad_ops ~buf_ops ~blk_ops ~blk_dev_ops ~marshal_info
+    (* let write ~blk_id ~blk = 
+     *   assert(!check_blk blk);
+     *   blk_dev_ops.write ~blk_id ~blk
+     * in
+     * let read ~blk_id = 
+     *   blk_dev_ops.read ~blk_id >>= fun blk ->
+     *   assert(!check_blk blk);
+     *   return blk
+     * in
+     * let blk_dev_ops = { blk_dev_ops with read; write } in *)
 
-    let _ = make
+    let (plist_marshal_ops,rest) = 
+      make ~plist_marshal_info:marshal_info ~buf_ops ~blk_ops |> fun (plist_marshal_ops, `K1 f) ->
+      (plist_marshal_ops,f)
+
   end
 
   module Test() : sig
     val main : unit -> (unit, lwt) m
   end = struct
+    open Int_plist
 
     (** In-mem blk dev, mutated directly *)
     let mem = ref (Tjr_map.With_pervasives_compare.empty ())
@@ -94,11 +95,11 @@ module Blk_as_bytes_buf_as_bytes = struct
 
     let _ = with_mem
 
-    let int_plist = Int_plist.make with_mem
+    let blk_dev_ops = blk_dev_ops with_mem
 
-    let _ = int_plist
+    let plist_extra_ops,`K2 plist_ops = rest ~monad_ops ~blk_dev_ops
 
-    let { m_u_ops=_; extra_ops={create_plist; read_plist}; plist_ops=add_sync } = int_plist
+    let {create_plist;read_plist} = plist_extra_ops
 
     (* let _ = 
      *   Int_plist.check_blk := (fun blk -> let _ = m_u_ops.unmarshal blk in true) *)
@@ -114,7 +115,7 @@ module Blk_as_bytes_buf_as_bytes = struct
         in
         {with_state}
       in
-      let {add;sync} = add_sync with_state in
+      let {add;sync} = plist_ops ~with_state in
       (1,0) |> iter_k (fun ~k (min_free_blk_id,n) -> 
           match n >= num_elts with
           | true -> 
@@ -158,7 +159,7 @@ module Blk_as_ba_buf_as_ba = struct
       open Bin_prot.Std
       type int_opt = int option [@@deriving bin_io]
     end
-    
+
     let max_sz = 10 (* 1 for option; 1 for int tag; 8 for int *)
 
     let m_elt (x:int option) (buf,off) = 
@@ -178,7 +179,7 @@ module Blk_as_ba_buf_as_ba = struct
       u_elt buf off |> fun (x,off) -> 
       x |> (function None -> None | Some x -> Some(Blk_id_as_int.of_int x)) |> fun x -> 
       (x,off)
-                                             
+
     let marshal_info : (int,blk_id,blk,buf)plist_marshal_info = {
       max_elt_sz=max_sz;
       max_blk_id_sz=max_sz;
@@ -195,17 +196,17 @@ module Blk_as_ba_buf_as_ba = struct
                        |> function | (R4 k) -> k with_map
                                    | _ -> failwith __LOC__)
 
-    let make with_mem = 
-      let blk_dev_ops = blk_dev_ops with_mem in
-      make ~monad_ops ~buf_ops ~blk_ops ~blk_dev_ops ~marshal_info
 
-
+    let (plist_marshal_ops,rest) = 
+      make ~plist_marshal_info:marshal_info ~buf_ops ~blk_ops |> fun (plist_marshal_ops, `K1 f) ->
+      (plist_marshal_ops,f)
 
   end
 
   module Test() : sig
     val main : unit -> (unit, lwt) m
   end = struct
+    open Int_binprot
 
     (** In-mem blk dev, mutated directly *)
     let mem = ref (Tjr_map.With_pervasives_compare.empty ())
@@ -216,11 +217,11 @@ module Blk_as_ba_buf_as_ba = struct
 
     let _ = with_mem
 
-    let int_plist = Int_binprot.make with_mem
+    let blk_dev_ops = blk_dev_ops with_mem
 
-    let _ = int_plist
+    let plist_extra_ops,`K2 plist_ops = rest ~monad_ops ~blk_dev_ops
 
-    let { m_u_ops=_; extra_ops={create_plist; read_plist}; plist_ops=add_sync } = int_plist
+    let {create_plist;read_plist} = plist_extra_ops
 
     (* let _ = 
      *   Int_plist.check_blk := (fun blk -> let _ = m_u_ops.unmarshal blk in true) *)
@@ -236,7 +237,7 @@ module Blk_as_ba_buf_as_ba = struct
         in
         {with_state}
       in
-      let {add;sync} = add_sync with_state in
+      let {add;sync} = plist_ops ~with_state in
       (1,0) |> iter_k (fun ~k (min_free_blk_id,n) -> 
           match n >= num_elts with
           | true -> 
