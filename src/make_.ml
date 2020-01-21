@@ -93,6 +93,7 @@ module Make(S:sig
                  x_to_buf ([],None) |> fun (buf,off) -> 
                  let pl = { hd=blk_id;
                             tl=blk_id;
+                            blk_len=1;
                             buffer=buf;
                             off;
                             (* nxt_is_none=true; *)
@@ -161,9 +162,9 @@ module Make(S:sig
                       in
 
                       (* don't use blk_dev *)
-                      let move_to_nxt ~hd ~nxt ~buf ~off ~dirty =
+                      let move_to_nxt ~hd ~nxt ~blk_len ~buf ~off ~dirty =
                         (* assert(buf_to_x state.buffer |> snd = nxt); *)
-                        { hd; tl=nxt; buffer=buf; off; (* nxt_is_none=true; *) dirty }
+                        { hd; tl=nxt; blk_len; buffer=buf; off; (* nxt_is_none=true; *) dirty }
                       in
 
                       let add = 
@@ -185,7 +186,7 @@ module Make(S:sig
                                            |> add_elt_list_terminator state.off
                                 in
                                 write ~blk_id ~blk:(buf' |> buf_to_blk) >>= fun () ->
-                                move_to_nxt ~hd:state.hd ~nxt ~buf ~off ~dirty:false 
+                                move_to_nxt ~hd:state.hd ~nxt ~blk_len:(state.blk_len+1) ~buf ~off ~dirty:false 
                                 |> set_state >>= fun () ->
                                 return None))
                       in
@@ -197,7 +198,63 @@ module Make(S:sig
                             write ~blk_id ~blk:(buf_to_blk buf) >>= fun () ->
                             set_state {state with buffer=buf; dirty=false})
                       in
-                      { add;sync}))))
+                      let blk_len () = 
+                        with_state.with_state (fun ~state ~set_state ->
+                          return state.blk_len)
+                      in
+                      let adv_hd () = 
+                        with_state.with_state (fun ~state ~set_state ->
+                          let { hd; _ } = state in
+                          read ~blk_id:hd >>= fun old_blk ->
+                          old_blk |> blk_to_x |> fun (elts,nxt) ->        
+                          match nxt with
+                          | None -> return (Error ())
+                          | Some new_hd -> 
+                            set_state { state with hd=new_hd;blk_len=state.blk_len-1 } >>= fun () ->
+                            return (Ok { old_hd=hd; old_elts=elts; new_hd }))
+                      in
+                      let adv_tl nxt = 
+                        with_state.with_state (fun ~state ~set_state ->
+                          (* write the new blk first *)
+                          x_to_buf ([],None) |> fun (buf,off) ->
+                          write ~blk_id:nxt ~blk:(buf_to_blk buf) >>= fun () ->
+                          (* write old blk with nxt *)
+                          let blk_id = state.tl in
+                          let buf' = state.buffer |> set_nxt (Some nxt)
+                                     |> add_elt_list_terminator state.off
+                          in
+                          write ~blk_id ~blk:(buf' |> buf_to_blk) >>= fun () ->
+                          move_to_nxt ~hd:state.hd ~nxt ~blk_len:(state.blk_len+1) ~buf ~off ~dirty:false
+                          |> set_state >>= fun () ->
+                          return ())
+                      in
+                      let get_hd_tl () = 
+                        with_state.with_state (fun ~state ~set_state ->
+                          return (state.hd,state.tl))
+                      in
+                      let read_blk blk_id = 
+                        read ~blk_id >>= fun blk ->
+                        try 
+                          let x = blk_to_x blk in
+                          return (Ok(blk_to_x blk))
+                        with _ -> return (Error ())
+                      in                            
+                      let read_hd () =
+                        get_hd_tl () >>= fun (hd,tl) -> 
+                        (* FIXME following should be a warning on log *)
+                        assert((match hd=tl with | true -> Printf.printf "Warning: read_hd, attempt to read hd when hd=tl; hd may not be synced" | false -> ()); true);
+                        read_blk hd >>= fun r ->
+                        match r with
+                        | Ok x -> return x
+                        | Error () -> failwith "read_hd: hd block was not marshalled correctly on disk; are you sure it was synced?"
+                      in
+                      (*
+                      let read_tl =
+                        get_hd_tl () >>= fun (hd_,tl) ->
+                        read_blk tl
+                      in
+                         *)
+                      { add;sync;blk_len;adv_hd;adv_tl;get_hd_tl;read_hd }))))
 
   let _ = make
 end

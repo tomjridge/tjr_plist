@@ -115,7 +115,7 @@ module Blk_as_bytes_buf_as_bytes = struct
         in
         {with_state}
       in
-      let {add;sync} = plist_ops ~with_state in
+      let {add;sync;_} = plist_ops ~with_state in
       (1,0) |> iter_k (fun ~k (min_free_blk_id,n) -> 
           match n >= num_elts with
           | true -> 
@@ -237,7 +237,8 @@ module Blk_as_ba_buf_as_ba = struct
         in
         {with_state}
       in
-      let {add;sync} = plist_ops ~with_state in
+      let plist_ops = plist_ops ~with_state in
+      let {add;sync;_} = plist_ops in
       (1,0) |> iter_k (fun ~k (min_free_blk_id,n) -> 
           match n >= num_elts with
           | true -> 
@@ -258,7 +259,19 @@ module Blk_as_ba_buf_as_ba = struct
       xs |> List.map (fun (elts,nxt_) -> elts) |> List.concat |> fun xs ->
       Printf.printf "Read %d elts from disk\n" (List.length xs);
       assert(num_elts = List.length xs);
-      return ()
+      let { get_hd_tl; blk_len; read_hd; adv_hd; adv_tl;_ } = plist_ops in
+      let b2i blk_id = Blk_id_as_int.to_int blk_id in
+      get_hd_tl () >>= fun (hd,tl) ->
+      blk_len () >>= fun len ->
+      read_hd () >>= fun (elts,Some nxt) -> 
+      Printf.printf "hd:%d tl:%d blk_len:%d hd.nxt:%d\n" (b2i hd) (b2i tl) len (b2i nxt);
+      adv_hd () >>= fun _ ->
+      get_hd_tl () >>= fun (hd,tl) ->
+      blk_len () >>= fun len ->
+      read_hd () >>= fun (elts,Some nxt) -> 
+      Printf.printf "After adv_hd: \n";
+      Printf.printf "hd:%d tl:%d blk_len:%d hd.nxt:%d\n" (b2i hd) (b2i tl) len (b2i nxt);
+      return ()[@@warning "-8"]
 
     let _ = main
   end

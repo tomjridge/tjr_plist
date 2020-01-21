@@ -1,15 +1,17 @@
 
 
 type ('a,'blk_id,'buf) plist = {
-  hd             : 'blk_id;
-  tl             : 'blk_id;
-  buffer      : 'buf;
-  off         : int;
-  (* nxt_is_none : bool;  *)
-  dirty       : bool; (** may not have been written to disk *)
+  hd      : 'blk_id;
+  tl      : 'blk_id;
+  buffer  : 'buf;
+  off     : int;
+  blk_len : int;
+  dirty   : bool; (** may not have been written to disk *)
 }
 (** This is an internal implementation type.
 NOTE modifications take place in the tl block *)
+
+  (* nxt_is_none : bool;  *)
 
 
 (** Internal operations, for debugging *)
@@ -26,9 +28,9 @@ type ('a,'buf,'blk_id,'t) plist_extra_ops = {
 }
 
 type ('a,'blk_id,'blk) adv_hd = {
-  old_hd  :'blk_id;
-  old_blk :'a list;
-  new_hd  :'blk_id
+  old_hd   :'blk_id;
+  old_elts :'a list;
+  new_hd   :'blk_id
 }
 
 type 'a or_error = ('a,unit) result
@@ -37,13 +39,13 @@ type 'a or_error = ('a,unit) result
 type ('a,'buf (* FIXME *),'blk_id,'blk,'t) plist_ops = {
   add       : nxt:'blk_id -> elt:'a -> ('blk_id option,'t) m;
   sync      : unit -> (unit,'t)m;
-(*  blk_len   : unit -> (int,'t)m;
+  blk_len   : unit -> (int,'t)m;
   adv_hd    : unit -> ( ('a,'blk_id,'blk) adv_hd or_error,'t)m; (** advance hd *)
   adv_tl    : 'blk_id -> (unit,'t)m;
   get_hd_tl : unit -> ('blk_id * 'blk_id,'t)m;
   read_hd   : unit -> ('a list * 'blk_id option,'t)m;
-  read_tl   : unit -> ('a list * 'blk_id option,'t)m;
-  read_blk  : 'blk_id -> (('a list * 'blk_id option)or_error,'t)m*)
+  (* read_tl   : unit -> (('a list * 'blk_id option)or_error,'t)m; *)
+  (* read_blk  : 'blk_id -> (('a list * 'blk_id option)or_error,'t)m *)
 }
 (** add : The blk_id is returned if it is not used; another variant
    assumes an alloc function. We don't assume the nxt_blk is clean -
@@ -54,7 +56,9 @@ sync : we automatically sync before moving to a new tl; this is for partial bloc
 
 adv_hd: return an error if no nxt pointer (iff blk_len = 1 iff hd=tl)
 
-read_blk: we expect to be called on a blk_id that can be unmarshalled (ie one that is part of some plist)
+read_hd: assumes hd has been marshalled to disk; this likely won't be the case if hd=tl
+
+read_blk: we expect to be called on a blk_id that can be unmarshalled (ie one that is part of some plist); note that it may be possible that this succeeds on random blk data; use with care!
 *)
 
 module Plist_marshal_info = struct
