@@ -86,6 +86,7 @@ end
 include Plist_marshal_info
 
 
+(*
 (** The result of making the plist *)
 module Ret_ = struct
   type ('a,'blk_id,'blk,'buf,'t) ret_ = {
@@ -98,3 +99,4 @@ module Ret_ = struct
       require a [with_state] *)
 end
 include Ret_
+*)
