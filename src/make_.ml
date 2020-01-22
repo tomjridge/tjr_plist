@@ -134,7 +134,7 @@ module Make(S:sig
                       in
 
                       (* invariant: if tl not written to disk yet, then tl_dirty is true *)
-                      let sync ~state = 
+                      let sync' ~state = 
                         let { tl; buffer=buf; dirty; off; _ } = state in
                         match dirty with
                         | true -> (
@@ -228,9 +228,13 @@ module Make(S:sig
                           |> set_state >>= fun () ->
                           return ())
                       in
-                      let get_hd_tl () = 
+                      let get_hd () = 
                         with_state.with_state (fun ~state ~set_state ->
-                          return (state.hd,state.tl))
+                          return (state.hd))
+                      in
+                      let get_tl () = 
+                        with_state.with_state (fun ~state ~set_state ->
+                          return (state.tl))
                       in
                       let read_blk blk_id = 
                         read ~blk_id >>= fun blk ->
@@ -240,7 +244,8 @@ module Make(S:sig
                         with _ -> return (Error ())
                       in                            
                       let read_hd () =
-                        get_hd_tl () >>= fun (hd,tl) -> 
+                        get_hd () >>= fun hd -> 
+                        get_tl () >>= fun tl ->  (* FIXME only needed for checking *)
                         (* FIXME following should be a warning on log *)
                         assert((match hd=tl with | true -> Printf.printf "Warning: read_hd, attempt to read hd when hd=tl; hd may not be synced" | false -> ()); true);
                         read_blk hd >>= fun r ->
@@ -248,13 +253,21 @@ module Make(S:sig
                         | Ok x -> return x
                         | Error () -> failwith "read_hd: hd block was not marshalled correctly on disk; are you sure it was synced?"
                       in
+                      let append pl2 = 
+                        with_state.with_state (fun ~state ~set_state -> 
+                          let buf = state.buffer |> set_nxt (Some(pl2.hd)) in
+                          write ~blk_id:state.tl ~blk:(buf_to_blk buf) >>= fun () ->
+                          let { hd; tl; buffer; off; blk_len; dirty=_ } = state in
+                          set_state { hd; tl=pl2.tl; buffer=pl2.buffer; off=pl2.off; 
+                                      blk_len=(blk_len+pl2.blk_len); dirty=pl2.dirty })
+                      in
                       (*
                       let read_tl =
                         get_hd_tl () >>= fun (hd_,tl) ->
                         read_blk tl
                       in
                          *)
-                      { add;sync;blk_len;adv_hd;adv_tl;get_hd_tl;read_hd }))))
+                      { add;sync;blk_len;adv_hd;adv_tl;get_hd;get_tl;read_hd;append }))))
 
   let _ = make
 end

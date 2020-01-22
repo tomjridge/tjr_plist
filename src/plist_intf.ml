@@ -42,8 +42,11 @@ type ('a,'buf (* FIXME *),'blk_id,'blk,'t) plist_ops = {
   blk_len   : unit -> (int,'t)m;
   adv_hd    : unit -> ( ('a,'blk_id,'blk) adv_hd or_error,'t)m; (** advance hd *)
   adv_tl    : 'blk_id -> (unit,'t)m;
-  get_hd_tl : unit -> ('blk_id * 'blk_id,'t)m;
+  get_hd    : unit -> ('blk_id,'t)m;
+  get_tl    : unit -> ('blk_id,'t)m;
+  (* get_hd_tl : unit -> ('blk_id * 'blk_id,'t)m; *)
   read_hd   : unit -> ('a list * 'blk_id option,'t)m;
+  append    : ('a,'blk_id,'buf) plist -> (unit,'t)m;
   (* read_tl   : unit -> (('a list * 'blk_id option)or_error,'t)m; *)
   (* read_blk  : 'blk_id -> (('a list * 'blk_id option)or_error,'t)m *)
 }
@@ -52,14 +55,29 @@ type ('a,'buf (* FIXME *),'blk_id,'blk,'t) plist_ops = {
    we may write a single elt into the new blk then sync that before
    updating the nxt pointer.
 
-sync : we automatically sync before moving to a new tl; this is for partial blocks which we need to sync
+sync : we automatically sync before moving to a new tl; this is for
+   partial blocks which we need to sync
 
 adv_hd: return an error if no nxt pointer (iff blk_len = 1 iff hd=tl)
 
-read_hd: assumes hd has been marshalled to disk; this likely won't be the case if hd=tl
+adv_tl: write tl and advance tl to a fresh blk
 
-read_blk: we expect to be called on a blk_id that can be unmarshalled (ie one that is part of some plist); note that it may be possible that this succeeds on random blk data; use with care!
+read_hd: assumes hd has been marshalled to disk; this likely won't be
+   the case if hd=tl
+
+append: take a second plist, and adjust the "current" plist so that
+   the hd is unchanged, but the tl points to the tl of the second
+   plist (and the buf and offset etc are copied); an assumption is
+   that the second plist is never used from this point onwards. FIXME
+   clearly we need to remove the pl2 from the global state, or else we
+   have a space leak
+
 *)
+
+
+(* read_blk: we expect to be called on a blk_id that can be unmarshalled (ie one that is part of some plist); note that it may be possible that this succeeds on random blk data; use with care! *)
+
+
 
 module Plist_marshal_info = struct
   type ('a,'blk_id,'blk,'buf) plist_marshal_info = {
