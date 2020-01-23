@@ -31,8 +31,9 @@ free_many: free an entire list of blk_ids, by appending to this
 
 
 type 'a freelist = {
-  transient: 'a list;
-  waiting: ('a Event.event list);
+  transient          : 'a list;
+  waiting            : ('a Event.event list);
+  disk_thread_active : bool;
 }
 (** The freelist state, in addition to the plist.
 

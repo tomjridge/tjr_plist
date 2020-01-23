@@ -1,8 +1,11 @@
+(* FIXME perhaps this would be better as a queue of blk_ids, and a
+   self-throttling thread on one end *)
+
 open Freelist_intf
 
 type ('elt,'blk_id,'t) version = 
   | For_blkids of { e2b:'elt -> 'blk_id; b2e: 'blk_id -> 'elt } 
-  (** The version to implement the blk freelist *)
+  (** The version to implement the blk freelist; the elts are actually blk_ids *)
 
   | For_arbitrary_elts of { alloc: unit -> ('blk_id,'t)m; free: 'blk_id -> (unit,'t)m }
   (** The version where the freelist provides the alloc and free blk functionality *)
@@ -12,7 +15,9 @@ module type S = sig
   type blk_id
   type blk
   type buf
+
   type elt (** elements stored in the free list *)
+
   type t
 
 end
@@ -44,7 +49,6 @@ module Make(S:S) = struct
     let ( >>= ) = monad_ops.bind in
     let return = monad_ops.return in
     let Event.{ ev_create; ev_wait; ev_signal } = event_ops in
-    let disk_thread () = return () (* FIXME *) in
     let {add; _ } = plist in
 
     (* redefine add to use alloc if available *)
@@ -60,22 +64,39 @@ module Make(S:S) = struct
         `For_arbitrary_elts (alloc,free,add)
     in
 
+    (* The disk_thread asynchronously attempts to add elements to the
+       transient list by reading from the head of the on-disk list and
+       returning new elts *)
+    (* disk_thread gets triggered when we fall below tr_lower
+       bound. We need to record that a disk_thread is active *)
+    let disk_thread () = 
+      (* we need to read blk_ids from hd, advance hd, add to
+         transients, then sync freelist in root block before allowing
+         other threads to run *)
+      return () (* FIXME *) 
+    in
+
     let alloc () =
+      with_freelist.with_state (fun ~state:s ~set_state -> 
+        match List.length s.transient < tr_lower && not s.disk_thread_active with
+        | false -> return ()
+        | true -> 
+          async(disk_thread ()) >>= fun () ->
+          set_state {s with disk_thread_active=true}) >>= fun () ->
+
       with_freelist.with_state (fun ~state:s ~set_state -> 
         match s.transient with
         | [] -> (
-            let need_disk_thread = s.waiting=[] in
-            (match need_disk_thread with 
-             | true -> async(disk_thread())
-             | false -> return ()) >>= fun () ->
+            (* FIXME are we guaranteed that the disk thread is active? *)
+            assert(s.disk_thread_active=true);
             ev_create () >>= fun (ev: elt Event.event) ->              
             set_state {s with waiting=ev::s.waiting } >>= fun () -> 
+            (* FIXME do we have to release the state before waiting? *)
             ev_wait ev >>= fun elt ->
             return elt)
         | elt::transient -> 
           set_state {s with transient} >>= fun () ->
-          return elt
-      )
+          return elt)
     in
     let alloc_many n = failwith "FIXME" in
     
