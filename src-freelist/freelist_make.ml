@@ -1,5 +1,12 @@
 open Freelist_intf
 
+type ('elt,'blk_id,'t) version = 
+  | For_blkids of { e2b:'elt -> 'blk_id; b2e: 'blk_id -> 'elt } 
+  (** The version to implement the blk freelist *)
+
+  | For_arbitrary_elts of { alloc: unit -> ('blk_id,'t)m; free: 'blk_id -> (unit,'t)m }
+  (** The version where the freelist provides the alloc and free blk functionality *)
+
 module type S = sig
 
   type blk_id
@@ -8,11 +15,6 @@ module type S = sig
   type elt (** elements stored in the free list *)
   type t
 
-  type version = 
-     | For_blkids of { e2b:elt -> blk_id; b2e: blk_id -> elt } 
-
-     | For_arbitrary_elts of { alloc: unit -> (blk_id,t)m; free: blk_id -> (unit,t)m }
-     (** We assume the freelist already exists *)
 end
 
 [@@@warning "-26-8"] (* FIXME *)
@@ -20,6 +22,8 @@ end
 module Make(S:S) = struct
 
   open S
+
+  type nonrec version = (elt,blk_id,t)version
 
   (* try to keep the transient list size between these two *)
   let tr_upper = 4
