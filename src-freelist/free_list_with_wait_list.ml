@@ -20,7 +20,7 @@ Each object (file, directory...) has an associated list of blks in
 
 A free list contains the following:
 
-- an (optional) open range of the form [n,infinity), indicating that
+- an (optional) open range of the form  \[n,infinity), indicating that
    blocks n upwards are free (there may additionally be a limit on the
    total number of blocks) - a list of free-blk-lists - or do we want
    to mutate the blks so we just have a huge list of free blks?  - a

@@ -23,6 +23,12 @@
          (depends ocamlfind dune tjr_plist)
 )
 
+(package 
+         (name tjr_plist_freelist)
+         (synopsis "A freelist")
+         (depends ocamlfind dune tjr_plist)
+)
+
 
 ;; (package 
 ;;          (name mini_examples)

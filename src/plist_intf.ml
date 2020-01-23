@@ -38,6 +38,7 @@ type 'a or_error = ('a,unit) result
 (** plist operations which require the plist state from the monad *)
 type ('a,'buf (* FIXME *),'blk_id,'blk,'t) plist_ops = {
   add       : nxt:'blk_id -> elt:'a -> ('blk_id option,'t) m;
+  add_if_room: 'a -> (bool,'t)m;
   sync      : unit -> (unit,'t)m;
   blk_len   : unit -> (int,'t)m;
   adv_hd    : unit -> ( ('a,'blk_id,'blk) adv_hd or_error,'t)m; (** advance hd *)
@@ -54,6 +55,8 @@ type ('a,'buf (* FIXME *),'blk_id,'blk,'t) plist_ops = {
    assumes an alloc function. We don't assume the nxt_blk is clean -
    we may write a single elt into the new blk then sync that before
    updating the nxt pointer.
+
+add_if_room: returns a boolean to indicate if the element was added in the current tl
 
 sync : we automatically sync before moving to a new tl; this is for
    partial blocks which we need to sync

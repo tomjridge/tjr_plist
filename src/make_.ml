@@ -167,6 +167,16 @@ module Make(S:sig
                         { hd; tl=nxt; blk_len; buffer=buf; off; (* nxt_is_none=true; *) dirty }
                       in
 
+                      let add_if_room elt = 
+                        with_state.with_state (fun ~state ~set_state ->
+                          let { off; _ } = state in
+                          match can_fit_elt off with
+                          | true -> add_elt ~state ~elt |> fun s ->
+                                    set_state s >>= fun () ->
+                                    return true
+                          | false -> return false)
+                      in
+                        
                       let add = 
                         fun ~nxt ~elt ->
                           with_state.with_state (fun ~state ~set_state ->
@@ -267,7 +277,7 @@ module Make(S:sig
                         read_blk tl
                       in
                          *)
-                      { add;sync;blk_len;adv_hd;adv_tl;get_hd;get_tl;read_hd;append }))))
+                      { add;add_if_room;sync;blk_len;adv_hd;adv_tl;get_hd;get_tl;read_hd;append }))))
 
   let _ = make
 end
