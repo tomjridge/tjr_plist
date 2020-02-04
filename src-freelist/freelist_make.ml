@@ -22,7 +22,7 @@ module type S = sig
 
 end
 
-[@@@warning "-26-8"] (* FIXME *)
+(* [@@@warning "-26-8"] (\* FIXME *\) *)
 
 module Make(S:S) = struct
 
@@ -64,39 +64,109 @@ module Make(S:S) = struct
         `For_arbitrary_elts (alloc,free,add)
     in
 
+    let _ = version in
+
     (* The disk_thread asynchronously attempts to add elements to the
        transient list by reading from the head of the on-disk list and
        returning new elts *)
-    (* disk_thread gets triggered when we fall below tr_lower
-       bound. We need to record that a disk_thread is active *)
+    (* disk_thread gets triggered when we fall below tr_lower bound;
+       we need to record that a disk_thread is active; the disk_thread
+       then repeatedly goes to disk and uses the resulting frees to
+       satisfy the waiting threads; the disk_thread only finishes
+       doing this if the number of transients AFTER satisfying the
+       waiting threads is at least tr_lower; FIXME we may need to
+       throttle if the number of waiters keeps growing, or at least
+       never shrinks to 0; perhaps the disk thread exponentially
+       increases the number of blocks it scans each time
+
+       NOTE that when we advance the hd, the old head becomes free
+    *)
     let disk_thread () = 
-      (* we need to read blk_ids from hd, advance hd, add to
-         transients, then sync freelist in root block before allowing
-         other threads to run *)
-      return () (* FIXME *) 
+      (* we need to: read elts from hd, advance hd, sync hd, signal waiters *)
+      let step () = 
+        plist.adv_hd () >>= function
+        | Error () -> return `End_of_plist 
+        | Ok {old_hd; old_elts; _ } -> (
+            plist.sync () >>= fun () ->
+
+            (* maybe free old_hd (or, if we are dealing with the
+               freelist itself, add to elts) *)
+            (match version with
+             | `For_blkids (e2b,b2e) -> return (Some(b2e old_hd))
+             | `For_arbitrary_elts (alloc,free,add) -> 
+               free old_hd >>= fun () -> return None) >>= fun e_opt ->
+
+            let elts = match e_opt with None -> old_elts | Some e -> e::old_elts in
+
+            with_freelist.with_state (fun ~state:s ~set_state ->
+                assert(s.disk_thread_active);
+                (elts,s.waiting) |> iter_k (fun ~k (elts,waiting) -> 
+                    match elts,waiting with
+                    | [],_ -> return {s with waiting}
+                    | _,[] -> return {s with waiting=[]; transient=elts@s.transient}
+                    | e::elts,w::waiting -> (
+                        ev_signal w e >>= fun () -> 
+                        k (elts,waiting)))
+                >>= fun s -> 
+                let continue_ = s.waiting!=[] || List.length s.transient < tr_lower in
+                (* NOTE if we know we are not going to continue, we
+                   take this opportunity to unset the
+                   disk_thread_active flag; we have to do this while
+                   we have the state *)
+                set_state { s with disk_thread_active=(not continue_) } >>= fun () ->
+                return (`Ok continue_)) )
+      in     
+
+      let rec loop () = step () >>= function 
+        | `Ok true -> loop ()
+        | `Ok false -> return `Finished
+        | `End_of_plist -> 
+          (* at this point, we have exhausted the frees stored on disk *)
+          return `Unfinished
+      in
+
+      loop ()
     in
 
     let alloc () =
+      (* check if we need to go to disk *)
       with_freelist.with_state (fun ~state:s ~set_state -> 
-        match List.length s.transient < tr_lower && not s.disk_thread_active with
-        | false -> return ()
-        | true -> 
-          async(disk_thread ()) >>= fun () ->
-          set_state {s with disk_thread_active=true}) >>= fun () ->
+          match List.length s.transient < tr_lower && not s.disk_thread_active with
+          | false -> return false
+          | true -> 
+            (* FIXME we must ensure that the freelist state is protected eg with a mutex *)
+            set_state {s with disk_thread_active=true} >>= fun () -> return true) 
 
+      (* maybe launch a disk thread *)
+      >>= (function
+          | false -> return ()
+          | true -> 
+            let t = disk_thread () >>= fun _ -> failwith "FIXME we have to allocate from min_free_blk_id" in
+            (* FIXME add min_free_elt to freelist state *)
+            async t) >>= fun () ->
+
+      (* then try to get a free elt *)
       with_freelist.with_state (fun ~state:s ~set_state -> 
         match s.transient with
         | [] -> (
-            (* FIXME are we guaranteed that the disk thread is active? *)
-            assert(s.disk_thread_active=true);
+            (* FIXME are we guaranteed that the disk thread is active? not necessarily *)
+            (* assert(s.disk_thread_active=true); *)
+            (* we need to have an invariant: after the disk thread
+               runs and frees all the waiting threads, then the
+               remaining transient elts are at least tr_lower *)
             ev_create () >>= fun (ev: elt Event.event) ->              
             set_state {s with waiting=ev::s.waiting } >>= fun () -> 
-            (* FIXME do we have to release the state before waiting? *)
-            ev_wait ev >>= fun elt ->
-            return elt)
+            (* NOTE do we have to release the state before waiting?
+               yes; and we assume that if an event is fulfilled before
+               waiting on it, the wait succeeds ie events are one-shot *)
+            return (`Ev ev))
         | elt::transient -> 
           set_state {s with transient} >>= fun () ->
-          return elt)
+          return (`Elt elt)) >>= fun x ->
+
+      (match x with
+       | `Ev ev -> ev_wait ev
+       | `Elt elt -> return elt)      
     in
     let alloc_many n = failwith "FIXME" in
     

@@ -40,4 +40,7 @@ type 'a freelist = {
 transient: a non-persistent list of free elts that can be allocated
 
 waiting: a list of threads waiting for a disk process to return
+
+NOTE: we assume that the state is accessed via with_state, ie, only one thread at a time
+
  *)
