@@ -39,13 +39,13 @@ type 'a or_error = ('a,unit) result
 type ('a,'buf (* FIXME *),'blk_id,'blk,'t) plist_ops = {
   add       : nxt:'blk_id -> elt:'a -> ('blk_id option,'t) m;
   add_if_room: 'a -> (bool,'t)m;
-  sync      : unit -> (unit,'t)m;
+  sync_tl   : unit -> (unit,'t)m;
   blk_len   : unit -> (int,'t)m;
   adv_hd    : unit -> ( ('a,'blk_id,'blk) adv_hd or_error,'t)m; (** advance hd *)
   adv_tl    : 'blk_id -> (unit,'t)m;
   get_hd    : unit -> ('blk_id,'t)m;
   get_tl    : unit -> ('blk_id,'t)m;
-  (* get_hd_tl : unit -> ('blk_id * 'blk_id,'t)m; *)
+  get_hd_tl : unit -> ('blk_id * 'blk_id,'t)m;
   read_hd   : unit -> ('a list * 'blk_id option,'t)m;
   append    : ('a,'blk_id,'buf) plist -> (unit,'t)m;
   (* read_tl   : unit -> (('a list * 'blk_id option)or_error,'t)m; *)
@@ -121,3 +121,11 @@ module Ret_ = struct
 end
 include Ret_
 *)
+
+module Plist_sync_root_blk = struct
+  type ('blk_id,'t) t = {
+    sync_root_blk: ('blk_id*'blk_id) -> (unit,'t)m;
+  }
+end
+
+type ('blk_id,'t) srb = ('blk_id,'t) Plist_sync_root_blk.t

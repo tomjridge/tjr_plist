@@ -200,7 +200,7 @@ module Make(S:sig
                                 |> set_state >>= fun () ->
                                 return None))
                       in
-                      let sync =
+                      let sync_tl =
                         fun () ->
                           with_state.with_state (fun ~state ~set_state ->
                             let { tl=blk_id; buffer=buf; off; dirty; _ } = state in
@@ -246,6 +246,10 @@ module Make(S:sig
                         with_state.with_state (fun ~state ~set_state ->
                           return (state.tl))
                       in
+                      let get_hd_tl () = 
+                        with_state.with_state (fun ~state ~set_state ->
+                          return (state.hd,state.tl))
+                      in
                       let read_blk blk_id = 
                         read ~blk_id >>= fun blk ->
                         try 
@@ -277,7 +281,7 @@ module Make(S:sig
                         read_blk tl
                       in
                          *)
-                      { add;add_if_room;sync;blk_len;adv_hd;adv_tl;get_hd;get_tl;read_hd;append }))))
+                      { add;add_if_room;sync_tl;blk_len;adv_hd;adv_tl;get_hd;get_tl;get_hd_tl;read_hd;append }))))
 
   let _ = make
 end

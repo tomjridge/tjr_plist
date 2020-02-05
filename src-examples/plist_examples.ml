@@ -24,41 +24,8 @@ module Blk_as_ba_buf_as_ba = struct
 
   module Int_binprot = struct
 
-    module Int_option = struct
-      open Bin_prot.Std
-      type int_opt = int option [@@deriving bin_io]
-    end
-
-    let max_sz = 10 (* 1 for option; 1 for int tag; 8 for int *)
-
-    let m_elt (x:int option) (buf,off) = 
-      Int_option.bin_write_int_opt buf ~pos:off x |> fun off' -> 
-      (buf,off')
-
-    let m_blk_id blk_id = 
-      blk_id |> (function None -> None | Some x -> Some (Blk_id_as_int.to_int x))
-      |> m_elt 
-
-    let u_elt buf off = 
-      let pos_ref = ref off in
-      Int_option.bin_read_int_opt buf ~pos_ref |> fun r ->
-      (r,!pos_ref)
-
-    let u_blk_id buf off = 
-      u_elt buf off |> fun (x,off) -> 
-      x |> (function None -> None | Some x -> Some(Blk_id_as_int.of_int x)) |> fun x -> 
-      (x,off)
-
-    let marshal_info : (int,blk_id,blk,buf)plist_marshal_info = {
-      max_elt_sz=max_sz;
-      max_blk_id_sz=max_sz;
-      m_elt;
-      u_elt;
-      m_blk_id;
-      u_blk_id;
-      blk_to_buf=(fun x -> Buf_as_bigarray.ba_copy x);
-      buf_to_blk=(fun x -> Buf_as_bigarray.ba_copy x);
-    }
+    let marshal_info = Plist_marshal_factory.(
+        make A2_elt_int__blk_ba_buf__buf_ba_buf |> fun (R2 x) -> x)[@@warning "-8"]
 
     let blk_dev_ops with_map = 
       Blk_dev_factory.(make A4_ba_4096_lwt_mem
@@ -99,12 +66,12 @@ module Blk_as_ba_buf_as_ba = struct
     let num_elts = 10_000
       
     let write_ints ~plist_ops ~min_free_blk_id = (
-      let {add;sync;_} = plist_ops in
+      let {add;sync_tl;_} = plist_ops in
       (min_free_blk_id,0) |> iter_k (fun ~k (min_free_blk_id,n) -> 
           match n >= num_elts with
           | true -> 
             (* NOTE make sure the last block is actually written *)
-            sync () >>= fun () ->
+            sync_tl () >>= fun () ->
             return min_free_blk_id
           | false -> 
             add

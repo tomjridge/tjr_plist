@@ -87,7 +87,7 @@ module Make(S:S) = struct
         plist.adv_hd () >>= function
         | Error () -> return `End_of_plist 
         | Ok {old_hd; old_elts; _ } -> (
-            plist.sync () >>= fun () ->
+            plist.sync_tl () >>= fun () ->
 
             (* maybe free old_hd (or, if we are dealing with the
                freelist itself, add to elts) *)
@@ -216,9 +216,9 @@ module Make(S:S) = struct
     let free_many pl = failwith "FIXME" in
 
     let sync = function
-      | `Tl_only -> plist.sync ()
+      | `Tl_only -> plist.sync_tl ()
       | `Tl_and_root_block -> 
-        plist.sync () >>= fun () ->
+        plist.sync_tl () >>= fun () ->
         plist.get_hd () >>= fun hd ->
         plist.get_tl () >>= fun tl ->
         root_block.write_freelist_roots ~hd ~tl >>= fun () ->
