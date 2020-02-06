@@ -116,7 +116,15 @@ module Make(S:sig
                      | Some nxt -> k (nxt,(elts,Some nxt)::acc))
                in
 
-               let extra_ops = { create_plist; read_plist } in
+               let read_plist_tl ~hd ~tl ~blk_len = 
+                 read ~blk_id:tl >>= fun blk ->
+                 blk_to_x blk |> fun (elts,nxt) ->
+                 (elts,nxt) |> x_to_buf |> fun (buf,off) ->                  
+                 return { hd; tl; buffer=buf; off; blk_len; dirty=false }
+               in
+                 
+
+               let extra_ops = { create_plist; read_plist; read_plist_tl } in
 
                (extra_ops, `K2(
                     fun ~(with_state:(('a,blk_id,buf)plist,t) with_state) -> 

@@ -12,6 +12,23 @@ type ('a,'buf) marshaller = {
   u_elt: 'buf -> int -> 'a * int 
 }
 
+(** Functor to construct a marshaller form a type deriving bin_io *)
+module Make_marshaller(X: sig 
+    type t[@@deriving bin_io] 
+    val max_elt_sz:int (* FIXME bin_io likely already knows this *)
+end) = struct
+  open X
+  let m_elt (x:t) (buf,off) = 
+    bin_write_t buf ~pos:off x |> fun off' -> 
+    (buf,off')
+
+  let u_elt buf off = 
+    let pos_ref = ref off in
+    bin_read_t buf ~pos_ref |> fun r ->
+    (r,!pos_ref)
+
+  let marshaller = { max_elt_sz; m_elt; u_elt }
+end
 
 (** Internal: buf is ba_buf *)
 

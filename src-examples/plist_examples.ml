@@ -48,7 +48,7 @@ end = struct
                    (plist_extra_ops,plist_ops))
   [@@warning "-8"]
 
-  let {create_plist;read_plist} = plist_extra_ops
+  let {create_plist;read_plist;read_plist_tl=_} = plist_extra_ops
     
   (* let plist_ops = plist_ops with_mem *)
 

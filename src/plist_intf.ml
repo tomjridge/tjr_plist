@@ -9,7 +9,10 @@ type ('a,'blk_id,'buf) plist = {
   dirty   : bool; (** may not have been written to disk *)
 }
 (** This is an internal implementation type.
-NOTE modifications take place in the tl block *)
+NOTE modifications take place in the tl block 
+
+FIXME? including blk_len makes things a bit trickier since we have to store this in the root blk
+*)
 
   (* nxt_is_none : bool;  *)
 
@@ -20,12 +23,20 @@ type ('a,'blk_id,'blk) plist_marshal_ops = {
   marshal   : 'a list * 'blk_id option->'blk; 
 }
 
-(** Operations which don't require the plist state; typically
-   initialization and debugging *)
 type ('a,'buf,'blk_id,'t) plist_extra_ops = {  
-  create_plist : 'blk_id -> (('a,'blk_id,'buf)plist,'t)m;
-  read_plist   : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m;
+  create_plist   : 'blk_id -> (('a,'blk_id,'buf)plist,'t)m;
+  (* read_plist_blk : 'blk_id -> ('a list * 'blk_id option,'t) m; *)
+  read_plist     : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m;
+  read_plist_tl  : hd:'blk_id -> tl:'blk_id -> blk_len:int -> (('a,'blk_id,'buf)plist,'t)m;
 }
+(** Operations which don't require the plist state; typically
+   initialization and debugging 
+
+- create_plist: in the current impl, this writes the empty list to disk
+- read_plist_tl: to constructs a plist from one previously written to disk; hd is assumed to point to a valid hd; tl is read and the plist constructed
+*)
+
+(* - read_plist_blk: read a single blk from disk; typically at creation time this is used to read the tl from disk *)
 
 type ('a,'blk_id,'blk) adv_hd = {
   old_hd   :'blk_id;
