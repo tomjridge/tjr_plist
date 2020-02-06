@@ -3,132 +3,96 @@
 (** NOTE unless otherwise specified, take blk_id to be int and blk_sz to be 4096. NOTE
    bin_prot favours bigarray as the buffer type *)
 
+(** Internal: blk and buf are ba_buf; ba4096 *)
+
+module Internal_ = struct
+  type blk_id = Blk_id_as_int.blk_id
+
+  (* FIXME have a buf_factory *)
+  module M3 = struct
+    type buf = ba_buf
+    let buf_ops = Buf_as_bigarray.ba_buf_ops
+    type blk = ba_buf
+    (* NOTE we must take care to copy the ba_buf when writing to disk *)
+    let blk_ops = Blk_factory.(make A3_ba_4096 |> fun (R3 x) -> x)[@@warning "-8"]
+  end
+
+  module Int_option = struct
+    open Bin_prot.Std
+    type int_opt = int option [@@deriving bin_io]
+  end
+end
+open Internal_  
+
 type 'a arg = 
   (* | A1_elt_int__blk_string__buf_bytes *)
   | A2_elt_int__blk_ba_buf__buf_ba_buf
-  | A3_elt_arbitrary__blk_ba_buf__buf_ba_buf of { 
-      max_elt_sz:int;
-      m_elt : 'a option -> (ba_buf * int) -> ba_buf * int;
-      u_elt : ba_buf -> int -> 'a option * int }
+  | A3_elt_arbitrary__blk_ba_buf__buf_ba_buf of 'a arg' 
+and 'a arg' = ('a option,ba_buf)Marshal_factory.marshaller
 (** 
-- A3: elt is arbitrary; blk is bigarray; buf is bigarray; 
+- A2: elt is int
+- A3: elt is arbitrary
 *)
-
-
 
 type 'a res = 
   (* | R1 of (int,Blk_id_as_int.blk_id,string,bytes) plist_marshal_info *)
-  | R2 of (int,Blk_id_as_int.blk_id,ba_buf,ba_buf) plist_marshal_info
-  | R3 of ('a,Blk_id_as_int.blk_id,ba_buf,ba_buf) plist_marshal_info
+  | R2 of int res'
+  | R3 of 'a res'
+and 'a res' = {
+  plist_marshal_info: ('a,blk_id,M3.blk,M3.buf) plist_marshal_info;
+  buf_ops: M3.buf buf_ops;
+  blk_ops: M3.blk blk_ops
+}
 
+(**/**)
+let make_ (type a) ({ max_elt_sz; m_elt; u_elt }:a arg') =
+  let module X = struct
+    (* let b2i blk_id = Blk_id_as_int.to_int blk_id *)
+    (* let i2b i = Blk_id_as_int.of_int i *)
 
-module Int_option = struct
-  open Bin_prot.Std
-  type int_opt = int option [@@deriving bin_io]
-end
+    type blk = M3.blk 
+    let blk_ops = M3.blk_ops
 
-let make = function
+    type buf = M3.buf
+    let buf_ops = M3.buf_ops
+
+    (* blk_id option is iso to int option *)
+    let int_opt_marshaller = Marshal_factory.(make A1_int_option__ba_buf |> fun (R1 x) -> x)
+
+    let max_blk_id_sz = int_opt_marshaller.max_elt_sz
+      
+    let m_blk_id blk_id = 
+      blk_id |> (function None -> None | Some x -> Some (Blk_id_as_int.to_int x))
+      |> int_opt_marshaller.m_elt
+
+    let u_blk_id buf off = 
+      int_opt_marshaller.u_elt buf off |> fun (x,off) -> 
+      x |> (function None -> None | Some x -> Some(Blk_id_as_int.of_int x)) |> fun x -> 
+      (x,off)
+
+    let plist_marshal_info : (a,blk_id,blk,buf)plist_marshal_info = {
+      max_elt_sz;
+      max_blk_id_sz;
+      m_elt;
+      u_elt;
+      m_blk_id;
+      u_blk_id;
+      blk_to_buf=(fun x -> Buf_as_bigarray.ba_copy x);
+      buf_to_blk=(fun x -> Buf_as_bigarray.ba_copy x);
+    }
+  end
+  in
+  X.{ plist_marshal_info; buf_ops; blk_ops }
+(**/**)
+
+let _ = make_
+
+let make (type a) (x:a arg) : a res = x |> function
+  | A3_elt_arbitrary__blk_ba_buf__buf_ba_buf x -> 
+    R3 (make_ x)
   | A2_elt_int__blk_ba_buf__buf_ba_buf -> 
-    let module X = struct
-      type blk_id = Blk_id_as_int.blk_id
-      (* let b2i blk_id = Blk_id_as_int.to_int blk_id *)
-      (* let i2b i = Blk_id_as_int.of_int i *)
-
-      type blk = Buf_as_bigarray.ba_buf (* NOTE we must take care to copy the bytes when writing to disk *)
-
-      (* let blk_ops = Blk_factory.(make A3_ba_4096 |> function R3 ops -> ops | _ -> failwith __LOC__) *)
-
-      type buf = Buf_as_bigarray.ba_buf
-
-      (* let buf_ops = Buf_as_bigarray.ba_buf_ops *)
-
-      module Int_binprot = struct
-
-        module Int_option = struct
-          open Bin_prot.Std
-          type int_opt = int option [@@deriving bin_io]
-        end
-
-        let max_sz = 10 (* 1 for option; 1 for int tag; 8 for int *)
-
-        let m_elt (x:int option) (buf,off) = 
-          Int_option.bin_write_int_opt buf ~pos:off x |> fun off' -> 
-          (buf,off')
-
-        let m_blk_id blk_id = 
-          blk_id |> (function None -> None | Some x -> Some (Blk_id_as_int.to_int x))
-          |> m_elt 
-
-        let u_elt buf off = 
-          let pos_ref = ref off in
-          Int_option.bin_read_int_opt buf ~pos_ref |> fun r ->
-          (r,!pos_ref)
-
-        let u_blk_id buf off = 
-          u_elt buf off |> fun (x,off) -> 
-          x |> (function None -> None | Some x -> Some(Blk_id_as_int.of_int x)) |> fun x -> 
-          (x,off)
-
-        let marshal_info : (int,blk_id,blk,buf)plist_marshal_info = {
-          max_elt_sz=max_sz;
-          max_blk_id_sz=max_sz;
-          m_elt;
-          u_elt;
-          m_blk_id;
-          u_blk_id;
-          blk_to_buf=(fun x -> Buf_as_bigarray.ba_copy x);
-          buf_to_blk=(fun x -> Buf_as_bigarray.ba_copy x);
-        }
-      end
-    end
-    in
-    R2 X.Int_binprot.marshal_info
-
-  | A3_elt_arbitrary__blk_ba_buf__buf_ba_buf { max_elt_sz; m_elt; u_elt } -> 
-    let module X = struct
-      type blk_id = Blk_id_as_int.blk_id
-      (* let b2i blk_id = Blk_id_as_int.to_int blk_id *)
-      (* let i2b i = Blk_id_as_int.of_int i *)
-
-      type blk = Buf_as_bigarray.ba_buf (* NOTE we must take care to copy the bytes when writing to disk *)
-
-      (* let blk_ops = Blk_factory.(make A3_ba_4096 |> function R3 ops -> ops | _ -> failwith __LOC__) *)
-
-      type buf = Buf_as_bigarray.ba_buf
-
-      (* let buf_ops = Buf_as_bigarray.ba_buf_ops *)
-
-      module Int_binprot = struct
-
-        module Int_option = struct
-          open Bin_prot.Std
-          type int_opt = int option [@@deriving bin_io]
-        end
-
-        let max_sz = 10 (* 1 for option; 1 for int tag; 8 for int *)
-
-        let m_blk_id blk_id = 
-          blk_id |> (function None -> None | Some x -> Some (Blk_id_as_int.to_int x))
-          |> m_elt 
-
-        let u_blk_id buf off = 
-          u_elt buf off |> fun (x,off) -> 
-          x |> (function None -> None | Some x -> Some(Blk_id_as_int.of_int x)) |> fun x -> 
-          (x,off)
-
-        let marshal_info : (int,blk_id,blk,buf)plist_marshal_info = {
-          max_elt_sz;
-          max_blk_id_sz=max_sz;
-          m_elt;
-          u_elt;
-          m_blk_id;
-          u_blk_id;
-          blk_to_buf=(fun x -> Buf_as_bigarray.ba_copy x);
-          buf_to_blk=(fun x -> Buf_as_bigarray.ba_copy x);
-        }
-      end
-    end
-    in
-    R3 X.Int_binprot.marshal_info
+    let x = Marshal_factory.(make A1_int_option__ba_buf |> fun (R1 x) -> x) in
+    make_ x |> fun x -> R2 x[@@warning "-8"]
 
 let _ = make
+

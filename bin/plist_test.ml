@@ -18,7 +18,7 @@ let _ =
       let module X = Blk_as_bytes_buf_as_bytes.Test() in
       X.main () *)
     | A2_binprot -> 
-      let module X = Blk_as_ba_buf_as_ba.Test() in
+      let module X = Test() in
       X.main ()
   in
   let task = 
