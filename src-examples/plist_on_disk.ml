@@ -54,9 +54,13 @@ open Bin_prot.Std
 
 module Internal = struct
   module B = Blk_id_as_int
+  let [b0;b1;b2] = List.map B.of_int [0;1;2][@@warning "-8"]
 end
 open Internal
 
+
+
+(* FIXME move these later *)
 let blk_ops = Blk_factory.(make A3_ba_4096 |> fun (R3 x) -> x)[@@warning "-8"]
 
 let blk_dev' = Blk_dev_factory.(
@@ -69,7 +73,9 @@ type root_blk = {
   min_free_blk_id:int
 }[@@deriving yojson, bin_io]
 
-let [b0;b1;b2] = List.map B.of_int [0;1;2][@@warning "-8"]
+
+
+
 
 module Internal_rb = struct
 
@@ -100,89 +106,91 @@ let filename = "plist_on_disk.store"
 module L = Tjr_monad.With_lwt
 open L
 
-let r6 : ((module Blk_dev_factory.R6), lwt) m = Blk_dev_factory.(make_6 (Filename filename))
+(* NOTE guard creation of r6 till post-runtime-init *)
+module Make() = struct
 
-let _ = r6
+  let r6 : ((module Blk_dev_factory.R6), lwt) m = Blk_dev_factory.(make_6 (Filename filename))
 
-module With_blk_dev(X:Blk_dev_factory.R6) = struct
-  open X
+  let _ = r6
 
-  module F = Plist_factory 
+  module With_blk_dev(X:Blk_dev_factory.R6) = struct
+    open X
 
-  let plist_marshal_ops,plist_extra_ops,plist_ops = 
-    F.(make (A2_elt_int__lwt blk_dev) |> fun (R2 x) -> x)
-    |> fun F.{plist_marshal_ops;plist_extra_ops;plist_ops} ->
-    plist_marshal_ops,plist_extra_ops,plist_ops
-  [@@warning "-8"]
+    module F = Plist_factory 
 
-  let rb_ops = rb_ops blk_dev
-                 
-  let _ = rb_ops
+    let plist_marshal_ops,plist_extra_ops,plist_ops = 
+      F.(make (A2_elt_int__lwt blk_dev) |> fun (R2 x) -> x)
+      |> fun F.{plist_marshal_ops;plist_extra_ops;plist_ops} ->
+      plist_marshal_ops,plist_extra_ops,plist_ops
+    [@@warning "-8"]
+
+    let rb_ops = rb_ops blk_dev
+
+    let _ = rb_ops
 
 
-  let create () = 
-    (* FIXME didn't we standardize these operations somewhere? *)
-    plist_extra_ops.create_plist b1 >>= fun pl ->
-    return pl
+    (* FIXME didn't we standardize these operations somewhere? yes, as extra_ops :( *)
+    let create_plist () = plist_extra_ops.create_plist b1 
 
-  (* FIXME separate into rb2pl and read *)
-  let read_root_blk () = 
-    rb_ops.root_read () >>= fun x -> 
-    x |> fun {hd;tl;blk_len;min_free_blk_id} ->
-    (* FIXME need a read_blk in extra ops *)
-    plist_extra_ops.read_plist_tl ~hd ~tl ~blk_len >>= fun pl ->     
-    return (pl,min_free_blk_id)
+    (* FIXME separate into rb2pl and read *)
+    let read_root_blk () = 
+      rb_ops.root_read () >>= fun x -> 
+      x |> fun {hd;tl;blk_len;min_free_blk_id} ->
+      (* FIXME need a read_blk in extra ops *)
+      plist_extra_ops.read_plist_tl ~hd ~tl ~blk_len >>= fun pl ->     
+      return (pl,min_free_blk_id)
 
-  let _ = read_root_blk
+    let _ = read_root_blk
 
-  module With_pl(Y:sig 
-      val pl: (int, B.blk_id, ba_buf) plist 
-      val min_free_blk_id: int
-    end) 
-    = (
-    struct    
+    module With_pl(Y:sig 
+        val pl: (int, B.blk_id, ba_buf) plist 
+        val min_free_blk_id: int
+      end) 
+      = (
+      struct    
 
-      let min = ref Y.min_free_blk_id
+        let min = ref Y.min_free_blk_id
 
-      let pl_to_rb (pl:('c,'a,'b)plist) : root_blk = 
-        { hd=pl.hd; tl=pl.tl; blk_len=pl.blk_len; min_free_blk_id= !min }
+        let pl_to_rb (pl:('c,'a,'b)plist) : root_blk = 
+          { hd=pl.hd; tl=pl.tl; blk_len=pl.blk_len; min_free_blk_id= !min }
 
-      let pl_ref : (int, B.blk_id, ba_buf) plist ref = ref Y.pl
+        let pl_ref : (int, B.blk_id, ba_buf) plist ref = ref Y.pl
 
-      let with_pl_ref =
-        let with_state f = f ~state:(!pl_ref) ~set_state:(fun s -> pl_ref:=s; return ()) in
-        { with_state }
+        let with_pl_ref =
+          let with_state f = f ~state:(!pl_ref) ~set_state:(fun s -> pl_ref:=s; return ()) in
+          { with_state }
 
-      let write_root_blk () = rb_ops.root_write (pl_to_rb !pl_ref)
+        let write_root_blk () = rb_ops.root_write (pl_to_rb !pl_ref)
 
-      let plist_ops = plist_ops with_pl_ref
+        let plist_ops = plist_ops with_pl_ref
 
-      (* NOTE this doesn't write to disk *)
-      let incr_min () = min:=!min + 1
+        (* NOTE this doesn't write to disk *)
+        let incr_min () = min:=!min + 1
 
-      (* FIXME maybe add ~lo ~hi *)
-      let add elts = 
-        elts |> iter_k (fun ~k elts -> match elts with
-            | [] -> return ()
-            | elt::elts -> 
-              plist_ops.add ~nxt:(B.of_int !min) ~elt >>= fun x -> 
-              (match x with 
-               | None -> incr_min ()
-               | Some _ -> ());
-              k elts)
+        (* FIXME maybe add ~lo ~hi *)
+        let add elts = 
+          elts |> iter_k (fun ~k elts -> match elts with
+              | [] -> return ()
+              | elt::elts -> 
+                plist_ops.add ~nxt:(B.of_int !min) ~elt >>= fun x -> 
+                (match x with 
+                 | None -> incr_min ()
+                 | Some _ -> ());
+                k elts)
 
-      (* let read_plist () = (!pl_ref).hd |> plist_extra_ops.read_plist *)
+        (* let read_plist () = (!pl_ref).hd |> plist_extra_ops.read_plist *)
 
-      let close_plist_and_blk_dev () = 
-        (* FIXME add close to plist_ops, which just calls sync_tl *)
-        plist_ops.sync_tl () >>= fun () ->
-        write_root_blk () >>= fun () ->
-        close_blk_dev ()
+        let close_plist_and_blk_dev () = 
+          (* FIXME add close to plist_ops, which just calls sync_tl *)
+          plist_ops.sync_tl () >>= fun () ->
+          write_root_blk () >>= fun () ->
+          close_blk_dev ()
 
-    end : sig
-      val add : int list -> (unit, lwt) m
-      val plist_ops : (int, ba_buf, B.blk_id, ba_buf, lwt) plist_ops
-      val close_plist_and_blk_dev : unit -> (unit, lwt) m
-    end)
+      end : sig
+        val add : int list -> (unit, lwt) m
+        val plist_ops : (int, ba_buf, B.blk_id, ba_buf, lwt) plist_ops
+        val close_plist_and_blk_dev : unit -> (unit, lwt) m
+      end)
 
+  end
 end
