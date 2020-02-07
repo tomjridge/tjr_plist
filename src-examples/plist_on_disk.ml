@@ -15,7 +15,8 @@ module Root_blk = struct
 
   open Tjr_monad.With_lwt
 
-  type ('a,'blk,'t) root_blk_ops = {
+  (* FIXME make this take a blk_id so we don't have to track these operations per blk_id *)
+  type ('a,'t) root_blk_ops = {
     root_write: 'a -> (unit,'t)m;
     root_read: unit -> ('a,'t)m;
   }
@@ -26,6 +27,7 @@ module Root_blk = struct
       ~(blk_dev_ops:('blk_id,'blk,'t)blk_dev_ops)
       ~marshaller 
       ~blk_id 
+      (* : ('a,'blk,'t) root_blk_ops *)
     =
     assert(marshaller.max_elt_sz <= (blk_dev_ops.blk_sz |> Blk_sz.to_int));
     let root_write r = 
@@ -39,6 +41,8 @@ module Root_blk = struct
       return r
     in
     {root_write;root_read}
+    
+  let _ = make_root_blk_ops
 end
 open Root_blk
 
@@ -65,10 +69,12 @@ type root_blk = {
   min_free_blk_id:int
 }[@@deriving yojson, bin_io]
 
+let [b0;b1;b2] = List.map B.of_int [0;1;2][@@warning "-8"]
+
 module Internal_rb = struct
 
   module Rb = Marshal_factory.Make_marshaller(
-    struct type t = root_blk[@@deriving bin_io] let max_elt_sz = 30 end)
+    struct type t = root_blk[@@deriving bin_io] let max_elt_sz = 40 end)
 
   let rb_marshaller = Rb.marshaller
 
@@ -77,37 +83,31 @@ module Internal_rb = struct
       ~blk_ops
       ~blk_dev_ops
       ~marshaller:rb_marshaller
-      ~blk_id:(B.of_int 0)
+      ~blk_id:b0
 
-  let init_root_blk = { hd=(B.of_int 1);tl=(B.of_int 1);blk_len=1;min_free_blk_id=2 }
+  let _ = rb_ops  (* FIXME change this to a pl marshaller *)
 
 end
 open Internal_rb
 
-(*
-let init_blks = 
-  (0,init_root_blk),
-  (1,"empty_plist")
 
-let first_plist_block = 1
-*)
+
 
 let filename = "plist_on_disk.store"
+
+
 
 module L = Tjr_monad.With_lwt
 open L
 
-module F = Plist_factory 
+let r6 : ((module Blk_dev_factory.R6), lwt) m = Blk_dev_factory.(make_6 (Filename filename))
 
-module Make_fd() = struct
-  let fd = 
-    L.from_lwt (Lwt_unix.(openfile filename [O_CREAT;O_RDWR] Tjr_file.default_create_perm))
-end
+let _ = r6
 
-module With_fd(X:sig val fd:Lwt_unix.file_descr end) = struct
+module With_blk_dev(X:Blk_dev_factory.R6) = struct
   open X
 
-  let blk_dev = blk_dev' fd
+  module F = Plist_factory 
 
   let plist_marshal_ops,plist_extra_ops,plist_ops = 
     F.(make (A2_elt_int__lwt blk_dev) |> fun (R2 x) -> x)
@@ -115,67 +115,74 @@ module With_fd(X:sig val fd:Lwt_unix.file_descr end) = struct
     plist_marshal_ops,plist_extra_ops,plist_ops
   [@@warning "-8"]
 
+  let rb_ops = rb_ops blk_dev
+                 
+  let _ = rb_ops
+
+
   let create () = 
     (* FIXME didn't we standardize these operations somewhere? *)
-    plist_extra_ops.create_plist (B.of_int 1) >>= fun pl ->
+    plist_extra_ops.create_plist b1 >>= fun pl ->
     return pl
 
-  let root_blk = ref init_root_blk
-
-  let with_root_blk =
-    let with_state f = f ~state:!root_blk ~set_state:(fun s -> root_blk:=s; return ()) in
-    { with_state }
-
-  (* at this point, we don't necessarily know what the initial state of the pl is *)
-
-
-  let rb_ops = rb_ops blk_dev
-
-  let pl_ref : (int, B.blk_id, ba_buf) plist option ref = ref None
-      
-  (* NOTE this assumes the pl_ref is Some by the time it is used *)
-  let with_pl_ref =
-    let with_state f = f ~state:(!pl_ref |> dest_Some) ~set_state:(fun s -> pl_ref:=Some s; return ()) in
-    { with_state }
-
-  (* as a side effect, this sets the root blk and also sets the pl ref *)
+  (* FIXME separate into rb2pl and read *)
   let read_root_blk () = 
     rb_ops.root_read () >>= fun x -> 
     x |> fun {hd;tl;blk_len;min_free_blk_id} ->
-    root_blk := x;
     (* FIXME need a read_blk in extra ops *)
-    plist_extra_ops.read_plist_tl ~hd ~tl ~blk_len >>= fun pl -> 
-    pl_ref := Some pl;
-    return pl
+    plist_extra_ops.read_plist_tl ~hd ~tl ~blk_len >>= fun pl ->     
+    return (pl,min_free_blk_id)
 
+  let _ = read_root_blk
 
-  let write_root_blk () = 
-    rb_ops.root_write (!root_blk)
+  module With_pl(Y:sig 
+      val pl: (int, B.blk_id, ba_buf) plist 
+      val min_free_blk_id: int
+    end) 
+    = (
+    struct    
 
-  (* FIXME name the argument with_plist to avoid confusion with all
-     the other with_ args *)
-  let plist_ops = plist_ops with_pl_ref
+      let min = ref Y.min_free_blk_id
 
-  (* NOTE this doesn't write to disk *)
-  let incr_min_free_blk_id () = 
-    root_blk:={ (!root_blk) with min_free_blk_id=1+(!root_blk).min_free_blk_id }
+      let pl_to_rb (pl:('c,'a,'b)plist) : root_blk = 
+        { hd=pl.hd; tl=pl.tl; blk_len=pl.blk_len; min_free_blk_id= !min }
 
-  let add elts = 
-    elts |> iter_k (fun ~k elts -> match elts with
-        | [] -> return ()
-        | elt::elts -> 
-          plist_ops.add ~nxt:(B.of_int (!root_blk.min_free_blk_id)) ~elt >>= fun x -> 
-          (match x with 
-           | None -> incr_min_free_blk_id ()
-           | Some _ -> ());
-          k elts)
+      let pl_ref : (int, B.blk_id, ba_buf) plist ref = ref Y.pl
 
-  let read_plist () = 
-    (!root_blk).hd |> plist_extra_ops.read_plist
+      let with_pl_ref =
+        let with_state f = f ~state:(!pl_ref) ~set_state:(fun s -> pl_ref:=s; return ()) in
+        { with_state }
 
-  let close () = 
-    plist_ops.sync_tl () >>= fun () ->
-    write_root_blk () >>= fun () ->
-    L.from_lwt(Lwt_unix.close fd)
+      let write_root_blk () = rb_ops.root_write (pl_to_rb !pl_ref)
+
+      let plist_ops = plist_ops with_pl_ref
+
+      (* NOTE this doesn't write to disk *)
+      let incr_min () = min:=!min + 1
+
+      (* FIXME maybe add ~lo ~hi *)
+      let add elts = 
+        elts |> iter_k (fun ~k elts -> match elts with
+            | [] -> return ()
+            | elt::elts -> 
+              plist_ops.add ~nxt:(B.of_int !min) ~elt >>= fun x -> 
+              (match x with 
+               | None -> incr_min ()
+               | Some _ -> ());
+              k elts)
+
+      (* let read_plist () = (!pl_ref).hd |> plist_extra_ops.read_plist *)
+
+      let close_plist_and_blk_dev () = 
+        (* FIXME add close to plist_ops, which just calls sync_tl *)
+        plist_ops.sync_tl () >>= fun () ->
+        write_root_blk () >>= fun () ->
+        close_blk_dev ()
+
+    end : sig
+      val add : int list -> (unit, lwt) m
+      val plist_ops : (int, ba_buf, B.blk_id, ba_buf, lwt) plist_ops
+      val close_plist_and_blk_dev : unit -> (unit, lwt) m
+    end)
 
 end
