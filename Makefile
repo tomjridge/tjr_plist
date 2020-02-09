@@ -6,6 +6,7 @@ default: all
 -include Makefile.ocaml
 
 run:
+	rm -f plist_on_disk.store
 	time $(DUNE) exec plist_test
 
 # for emacs completion

@@ -31,7 +31,7 @@ module Root_blk = struct
     =
     assert(marshaller.max_elt_sz <= (blk_dev_ops.blk_sz |> Blk_sz.to_int));
     let root_write r = 
-      let blk = blk_ops.of_string "" in
+      let blk = blk_ops.of_string (String.make 4096 'x') in
       marshaller.m_elt r (blk,0) |> fun (blk,_) ->
       blk_dev_ops.write ~blk_id ~blk
     in
@@ -129,7 +129,9 @@ module Make() = struct
     let _ = rb_ops
 
 
-    (* FIXME didn't we standardize these operations somewhere? yes, as extra_ops :( *)
+    (* FIXME didn't we standardize these operations somewhere? yes, as
+       extra_ops :( *)
+    (* FIXMe note that this doesn't write an initial root blk *)
     let create_plist () = plist_extra_ops.create_plist b1 
 
     (* FIXME separate into rb2pl and read *)
@@ -193,4 +195,48 @@ module Make() = struct
       end)
 
   end
+end
+
+
+module Test() = struct
+  open Tjr_monad.With_lwt
+
+  let test = 
+    Printf.printf "plist_on_disk: test starting...\n";
+    let ten_k = 10_000 in
+    
+    (* create and write some elts *)
+    let module M = Make() in
+    M.r6 >>= fun r6 ->
+    let module R6 = (val r6) in
+    (* let open R6 in *)
+    let module X = M.With_blk_dev(R6) in
+    X.create_plist () >>= fun pl -> 
+    (* FIXME rb should come before we establish the pl *)
+    X.rb_ops.root_write
+      { hd=pl.hd; tl=pl.tl; blk_len=pl.blk_len; min_free_blk_id=2 }
+    >>= fun () ->
+    let module Y = 
+      X.With_pl (struct let pl = pl let min_free_blk_id = 2 end) in
+    Y.add (List_.from_to 1 (ten_k+1)) >>= fun () ->
+    Y.close_plist_and_blk_dev () >>= fun () -> 
+    
+    (* now read back *)
+    let module M = Make() in
+    M.r6 >>= fun r6 ->
+    let module R6 = (val r6) in
+    let module X = M.With_blk_dev(R6) in
+    X.read_root_blk () >>= fun (pl,n) ->
+    Printf.printf "Read root blk, min is %d\n" n;
+    X.plist_extra_ops.read_plist pl.hd >>= fun xs ->
+    xs |> List.map (fun (ys,nx) -> ys) |> List.concat |> fun xs ->
+    Printf.printf "Read back: %d elts\n%!" (List.length xs);
+    assert (List.length xs = ten_k);
+    let module Y = 
+      X.With_pl (struct let pl = pl let min_free_blk_id = n end) in
+    (* let open Y in *)
+    Y.add (List_.from_to 20_001 30_000) >>= fun () ->
+    Y.close_plist_and_blk_dev () >>= fun () -> 
+    Printf.printf "plist_on_disk: test finished";
+    return ()
 end

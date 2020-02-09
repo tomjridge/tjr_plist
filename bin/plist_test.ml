@@ -27,6 +27,13 @@ let _ =
     p 2 >>= fun () -> 
     let t3 = now() in 
     Printf.printf "Timings: p2:%d \n" (t3-t2);
+    return () >>= fun () ->
+
+    
+    let module X = Plist_on_disk.Test() in
+    X.test >>= fun () ->
     return ()
   in    
-  Lwt_main.run ( task |> Tjr_monad.With_lwt.to_lwt)
+  Lwt_main.run ( 
+    task |> Tjr_monad.With_lwt.to_lwt
+  )
