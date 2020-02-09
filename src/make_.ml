@@ -104,7 +104,8 @@ module Make(S:sig
                  write ~blk_id ~blk >>= fun () ->
                  return {pl with dirty=false}
                in
-
+               
+               (* FIXME rename to eg read_entire_plist *)
                let read_plist blk_id = 
                  (blk_id,[]) |> iter_k (fun ~k (blk_id,acc) -> 
                      read ~blk_id >>= fun blk ->
@@ -116,6 +117,7 @@ module Make(S:sig
                      | Some nxt -> k (nxt,(elts,Some nxt)::acc))
                in
 
+               (* FIXME rename to eg create_plist_from_tl *)
                let read_plist_tl ~hd ~tl ~blk_len = 
                  read ~blk_id:tl >>= fun blk ->
                  blk_to_x blk |> fun (elts,nxt) ->

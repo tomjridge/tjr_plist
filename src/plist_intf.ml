@@ -26,7 +26,7 @@ type ('a,'blk_id,'blk) plist_marshal_ops = {
 type ('a,'buf,'blk_id,'t) plist_extra_ops = {  
   create_plist   : 'blk_id -> (('a,'blk_id,'buf)plist,'t)m;
   (* read_plist_blk : 'blk_id -> ('a list * 'blk_id option,'t) m; *)
-  read_plist     : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m;
+  read_plist     : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m;  (* FIXME rename to pl_read_elts *)
   read_plist_tl  : hd:'blk_id -> tl:'blk_id -> blk_len:int -> (('a,'blk_id,'buf)plist,'t)m;
 }
 (** Operations which don't require the plist state; typically
