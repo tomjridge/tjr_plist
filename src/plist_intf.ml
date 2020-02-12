@@ -17,7 +17,7 @@ FIXME? including blk_len makes things a bit trickier since we have to store this
   (* nxt_is_none : bool;  *)
 
 
-(** Internal operations, for debugging *)
+(** Internal operations, for debugging FIXME this is just ('a list * blk_id,'blk) mshlr *)
 type ('a,'blk_id,'blk) plist_marshal_ops = {  
   unmarshal : 'blk->'a list * 'blk_id option; 
   marshal   : 'a list * 'blk_id option->'blk; 
