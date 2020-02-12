@@ -25,19 +25,20 @@ module Root_blk = struct
   let make_root_blk_ops
       ~blk_ops 
       ~(blk_dev_ops:('blk_id,'blk,'t)blk_dev_ops)
-      ~marshaller 
+      ~root_mshlr 
       ~blk_id 
       (* : ('a,'blk,'t) root_blk_ops *)
     =
-    assert(marshaller.max_elt_sz <= (blk_dev_ops.blk_sz |> Blk_sz.to_int));
+    let { mshl; umshl; max_elt_sz } = root_mshlr in
+    assert(max_elt_sz <= (blk_dev_ops.blk_sz |> Blk_sz.to_int));
     let root_write r = 
       let blk = blk_ops.of_string (String.make 4096 'x') in
-      marshaller.m_elt r (blk,0) |> fun (blk,_) ->
+      mshl r (blk,0) |> fun (blk,_) ->
       blk_dev_ops.write ~blk_id ~blk
     in
     let root_read () = 
       blk_dev_ops.read ~blk_id >>= fun blk -> 
-      marshaller.u_elt blk 0 |> fun (r,_) -> 
+      umshl blk 0 |> fun (r,_) -> 
       return r
     in
     {root_write;root_read}
@@ -82,13 +83,13 @@ module Internal_rb = struct
   module Rb = Marshal_factory.Make_marshaller(
     struct type t = root_blk[@@deriving bin_io] let max_elt_sz = 40 end)
 
-  let rb_marshaller = Rb.marshaller
+  let rb_mshlr = Rb.mshlr
 
   let rb_ops blk_dev_ops = 
     Root_blk.make_root_blk_ops 
       ~blk_ops
       ~blk_dev_ops
-      ~marshaller:rb_marshaller
+      ~root_mshlr:rb_mshlr
       ~blk_id:b0
 
   let _ = rb_ops  (* FIXME change this to a pl marshaller *)
@@ -118,11 +119,8 @@ module Make() = struct
 
     module F = Plist_factory 
 
-    let plist_marshal_ops,plist_extra_ops,plist_ops = 
-      F.(make (A2_elt_int__lwt blk_dev) |> fun (R2 x) -> x)
-      |> fun F.{plist_marshal_ops;plist_extra_ops;plist_ops} ->
-      plist_marshal_ops,plist_extra_ops,plist_ops
-    [@@warning "-8"]
+    let F.{plist_marshal_ops;plist_extra_ops;plist_ops} = 
+      F.make_2 blk_dev
 
     let rb_ops = rb_ops blk_dev
 

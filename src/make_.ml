@@ -27,12 +27,15 @@ module Make(S:sig
     -> 
       let { create;get;len; _} = buf_ops in
       let { blk_sz;of_bytes;to_bytes;of_string;_ } = blk_ops in
-      let { max_elt_sz; max_blk_id_sz; m_elt; u_elt; 
-            m_blk_id; u_blk_id; blk_to_buf; buf_to_blk } = plist_marshal_info in
+      let { elt_mshlr; blk_id_mshlr; blk_to_buf; buf_to_blk } = 
+        plist_marshal_info in
       let buf_sz = Blk_sz.to_int blk_sz in
       let buf_space ~off = buf_sz - off in
       let can_fit ~off ~n = off+n<=buf_sz in
       
+      let max_blk_id_sz = blk_id_mshlr.max_elt_sz in
+      let max_elt_sz = elt_mshlr.max_elt_sz in
+
       let elts_offset0 = max_blk_id_sz in
       assert(blk_sz = blk_sz_4096);
       assert(can_fit ~off:elts_offset0 ~n:(2*max_elt_sz)); 
@@ -43,6 +46,12 @@ module Make(S:sig
 
 
       let empty_blk () = String.make buf_sz chr0 |> of_string in
+
+      let m_blk_id = blk_id_mshlr.mshl in
+      let u_blk_id = blk_id_mshlr.umshl in
+      let m_elt = elt_mshlr.mshl in
+      let u_elt = elt_mshlr.umshl in
+      
 
       (* NOTE returns the offset pointing to the None end-of-list marker *)
       let x_to_buf (elts,nxt) : buf*int = 

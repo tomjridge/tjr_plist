@@ -13,7 +13,7 @@ module Test() : sig
   val main : unit -> (unit, lwt) m
 end = struct
 
-  open Buf_as_bigarray
+  (* open Buf_as_bigarray *)
   type blk_id_ = Blk_id_as_int.blk_id
 
   type map_ = (blk_id_,ba_buf)Tjr_map.With_pervasives_compare.map_with_pervasives_compare
@@ -42,11 +42,7 @@ end = struct
 
   let _ : (blk_id_,ba_buf,lwt) blk_dev_ops = blk_dev_ops
 
-  let plist_extra_ops,mk_plist_ops = 
-    Plist_factory.(make (A2_elt_int__lwt blk_dev_ops)
-                   |> fun (R2 {plist_extra_ops;plist_ops;_}) -> 
-                   (plist_extra_ops,plist_ops))
-  [@@warning "-8"]
+  let Plist_factory.{plist_extra_ops;plist_ops=mk_plist_ops;_} =  Plist_factory.make_2 blk_dev_ops
 
   let {create_plist;read_plist;read_plist_tl=_} = plist_extra_ops
     

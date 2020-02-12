@@ -95,12 +95,8 @@ append: take a second plist, and adjust the "current" plist so that
 
 module Plist_marshal_info = struct
   type ('a,'blk_id,'blk,'buf) plist_marshal_info = {
-    max_elt_sz    :int;
-    max_blk_id_sz :int;
-    m_elt         : 'a option -> 'buf*int -> 'buf*int;
-    u_elt         : 'buf -> int -> 'a option * int;
-    m_blk_id      : 'blk_id option -> 'buf*int -> 'buf*int;
-    u_blk_id      : 'buf -> int -> 'blk_id option*int;
+    elt_mshlr     : ('a option,'buf)mshlr;
+    blk_id_mshlr  : ('blk_id option,'buf)mshlr;
     blk_to_buf: 'blk -> 'buf;
     buf_to_blk: 'buf -> 'blk  
   }
@@ -116,6 +112,14 @@ module Plist_marshal_info = struct
 *)
 end
 include Plist_marshal_info
+
+    (* max_elt_sz    :int; *)
+    (* max_blk_id_sz :int; *)
+    (* m_elt         : 'a option -> 'buf*int -> 'buf*int; *)
+    (* u_elt         : 'buf -> int -> 'a option * int; *)
+    (* m_blk_id      : 'blk_id option -> 'buf*int -> 'buf*int; *)
+    (* u_blk_id      : 'buf -> int -> 'blk_id option*int; *)
+
 
 
 (*

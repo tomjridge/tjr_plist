@@ -11,7 +11,7 @@ module Internal_ = struct
   (* FIXME have a buf_factory *)
   module M3 = struct
     type buf = ba_buf
-    let buf_ops = Buf_as_bigarray.ba_buf_ops
+    let buf_ops = ba_buf_ops
     type blk = ba_buf
     (* NOTE we must take care to copy the ba_buf when writing to disk *)
     let blk_ops = Blk_factory.(make A3_ba_4096 |> fun (R3 x) -> x)[@@warning "-8"]
@@ -28,7 +28,7 @@ type 'a arg =
   (* | A1_elt_int__blk_string__buf_bytes *)
   | A2_elt_int__blk_ba_buf__buf_ba_buf
   | A3_elt_arbitrary__blk_ba_buf__buf_ba_buf of 'a arg' 
-and 'a arg' = ('a option,ba_buf)Marshal_factory.marshaller
+and 'a arg' = ('a option,ba_buf)mshlr
 (** 
 - A2: elt is int
 - A3: elt is arbitrary
@@ -45,7 +45,7 @@ and 'a res' = {
 }
 
 (**/**)
-let make_ (type a) ({ max_elt_sz; m_elt; u_elt }:a arg') =
+let make_ (type a) (elt_mshlr:a arg') =
   let module X = struct
     (* let b2i blk_id = Blk_id_as_int.to_int blk_id *)
     (* let i2b i = Blk_id_as_int.of_int i *)
@@ -55,30 +55,28 @@ let make_ (type a) ({ max_elt_sz; m_elt; u_elt }:a arg') =
 
     type buf = M3.buf
     let buf_ops = M3.buf_ops
+                    
+    let int_opt_mshlr = Marshal_factory.make_1
 
-    (* blk_id option is iso to int option *)
-    let int_opt_marshaller = Marshal_factory.(make A1_int_option__ba_buf |> fun (R1 x) -> x)
-
-    let max_blk_id_sz = int_opt_marshaller.max_elt_sz
+    let max_blk_id_sz = int_opt_mshlr.max_elt_sz
       
     let m_blk_id blk_id = 
       blk_id |> (function None -> None | Some x -> Some (Blk_id_as_int.to_int x))
-      |> int_opt_marshaller.m_elt
+      |> int_opt_mshlr.mshl
 
     let u_blk_id buf off = 
-      int_opt_marshaller.u_elt buf off |> fun (x,off) -> 
+      int_opt_mshlr.umshl buf off |> fun (x,off) -> 
       x |> (function None -> None | Some x -> Some(Blk_id_as_int.of_int x)) |> fun x -> 
       (x,off)
 
+    (* FIXME move to common marshal_factory *)
+    let blk_id_mshlr = { max_elt_sz=max_blk_id_sz; mshl=m_blk_id; umshl=u_blk_id }
+
     let plist_marshal_info : (a,blk_id,blk,buf)plist_marshal_info = {
-      max_elt_sz;
-      max_blk_id_sz;
-      m_elt;
-      u_elt;
-      m_blk_id;
-      u_blk_id;
-      blk_to_buf=(fun x -> Buf_as_bigarray.ba_copy x);
-      buf_to_blk=(fun x -> Buf_as_bigarray.ba_copy x);
+      elt_mshlr;
+      blk_id_mshlr;
+      blk_to_buf=(fun x -> Buf_factory.Buf_as_bigarray.ba_copy x);
+      buf_to_blk=(fun x -> Buf_factory.Buf_as_bigarray.ba_copy x);
     }
   end
   in
@@ -87,12 +85,19 @@ let make_ (type a) ({ max_elt_sz; m_elt; u_elt }:a arg') =
 
 let _ = make_
 
+let make_2 =
+  let x = Marshal_factory.make_1 in
+  make_ x 
+
+let make_3 (type a) (x:a arg') = make_ x
+
+(*
 let make (type a) (x:a arg) : a res = x |> function
   | A3_elt_arbitrary__blk_ba_buf__buf_ba_buf x -> 
     R3 (make_ x)
   | A2_elt_int__blk_ba_buf__buf_ba_buf -> 
-    let x = Marshal_factory.(make A1_int_option__ba_buf |> fun (R1 x) -> x) in
+    let x = Marshal_factory.make_1 in
     make_ x |> fun x -> R2 x[@@warning "-8"]
 
 let _ = make
-
+*)
