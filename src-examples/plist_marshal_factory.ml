@@ -14,7 +14,7 @@ module Internal_ = struct
     let buf_ops = ba_buf_ops
     type blk = ba_buf
     (* NOTE we must take care to copy the ba_buf when writing to disk *)
-    let blk_ops = Blk_factory.(make A3_ba_4096 |> fun (R3 x) -> x)[@@warning "-8"]
+    let blk_ops = Blk_factory.make_3 ()
   end
 
   module Int_option = struct

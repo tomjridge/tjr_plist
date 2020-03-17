@@ -16,13 +16,13 @@ end = struct
   (* open Buf_as_bigarray *)
   type blk_id_ = Blk_id_as_int.blk_id
 
-  type map_ = (blk_id_,ba_buf)Tjr_map.With_pervasives_compare.map_with_pervasives_compare
+  type map_ = (blk_id_,ba_buf)Tjr_map.With_stdcmp.stdmap
 
   let b2i blk_id = Blk_id_as_int.to_int blk_id
   (* let i2b i = Blk_id_as_int.of_int i *)
 
   let empty: map_ = 
-    Tjr_map.With_pervasives_compare.empty ()
+    Tjr_map.With_stdcmp.empty ()
 
   (** In-mem blk dev, mutated directly *)
   let mem = ref empty
@@ -34,9 +34,7 @@ end = struct
   let _ = with_mem
 
   let blk_dev_ops with_map = 
-    Blk_dev_factory.(make A4_ba_4096_lwt_mem
-                     |> function | (R4 k) -> k with_map
-                                 | _ -> failwith __LOC__)
+    Blk_dev_factory.(make_4 with_map)
 
   let blk_dev_ops = blk_dev_ops with_mem
 

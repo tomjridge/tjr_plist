@@ -62,10 +62,9 @@ open Internal
 
 
 (* FIXME move these later *)
-let blk_ops = Blk_factory.(make A3_ba_4096 |> fun (R3 x) -> x)[@@warning "-8"]
+let blk_ops = Blk_factory.(make_3 ())
 
-let blk_dev' = Blk_dev_factory.(
-    make A5_blk_ba__lwt_fd |> fun (R5 f) -> f)[@@warning "-8"]
+let blk_dev' = Blk_dev_factory.(make_5)
 
 type root_blk = {
   hd:B.blk_id;
@@ -110,7 +109,7 @@ open L
 (* NOTE guard creation of r6 till post-runtime-init *)
 module Make() = struct
 
-  let r6 : ((module Blk_dev_factory.R6), lwt) m = Blk_dev_factory.(make_6 (Filename filename))
+  let r6 : ((module Blk_dev_factory.R6), lwt) m = Blk_dev_factory.(make_8 filename)
 
   let _ = r6
 
@@ -120,9 +119,9 @@ module Make() = struct
     module F = Plist_factory 
 
     let F.{plist_marshal_ops;plist_extra_ops;plist_ops} = 
-      F.make_2 blk_dev
+      F.make_2 blk_dev_ops
 
-    let rb_ops = rb_ops blk_dev
+    let rb_ops = rb_ops blk_dev_ops
 
     let _ = rb_ops
 
