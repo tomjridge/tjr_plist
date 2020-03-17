@@ -224,16 +224,16 @@ module Test() = struct
     let module R6 = (val r6) in
     let module X = M.With_blk_dev(R6) in
     X.read_root_blk () >>= fun (pl,n) ->
-    Printf.printf "Read root blk, min is %d\n" n;
+    Printf.printf "Read root blk, min is %#d\n" n;
     X.plist_extra_ops.read_plist pl.hd >>= fun xs ->
     xs |> List.map (fun (ys,nx) -> ys) |> List.concat |> fun xs ->
-    Printf.printf "Read back: %d elts\n%!" (List.length xs);
+    Printf.printf "Read back: %#d elts\n%!" (List.length xs);
     assert (List.length xs = ten_k);
     let module Y = 
       X.With_pl (struct let pl = pl let min_free_blk_id = n end) in
     (* let open Y in *)
     Y.add (List_.from_to 20_001 30_000) >>= fun () ->
     Y.close_plist_and_blk_dev () >>= fun () -> 
-    Printf.printf "plist_on_disk: test finished";
+    Printf.printf "plist_on_disk: test finished\n%!";
     return ()
 end

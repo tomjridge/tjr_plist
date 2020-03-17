@@ -97,7 +97,7 @@ end = struct
     debug with_state >>= fun () ->
     read_plist (Blk_id_as_int.of_int 0) >>= fun xs ->
     xs |> List.map (fun (elts,nxt_) -> elts) |> List.concat |> fun xs ->
-    Printf.printf "Read %d elts from disk\n" (List.length xs);
+    Printf.printf "Read %#d elts from disk\n" (List.length xs);
     assert(num_elts = List.length xs);
 
     (* print some info *)
@@ -146,7 +146,7 @@ end = struct
     (* read back and check *)
     read_plist (Blk_id_as_int.of_int 0) >>= fun xs ->
     xs |> List.map (fun (elts,nxt_) -> elts) |> List.concat |> fun xs ->
-    Printf.printf "Read %d elts from disk\n" (List.length xs);
+    Printf.printf "Read %#d elts from disk\n" (List.length xs);
     assert(num_elts * 2 = List.length xs);
     let { get_hd; get_tl; blk_len; read_hd; adv_hd; adv_tl;_ } = plist_ops_1 in
     let b2i blk_id = Blk_id_as_int.to_int blk_id in
