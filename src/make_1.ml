@@ -1,4 +1,4 @@
-(** Construct a persistent list.
+(** Construct a persistent list (most generic version).
 
 We store the list of elts from offset off0 (say); the nxt pointer
    takes up the first off0 bytes. Assumes max size of marshalled
@@ -6,10 +6,12 @@ We store the list of elts from offset off0 (say); the nxt pointer
 
     When an elt is added, we marshal to buffer immediately (same for
    nxt pointer). Only when we write to disk do we update the buffer
-   with the None pointer.
+    with the None pointer.
 
 
   *)
+
+
 open Plist_intf
 
 [@@@warning "-26"] (* FIXME *)

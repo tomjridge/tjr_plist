@@ -1,6 +1,6 @@
 (** A persistent (on-disk) list. 
 
-Look at {!Make_4} for the most readable doc.
+Look at {!Plist_intf} for the main types. {!Make_4} has the most succinct "make" function.
 *)
 
 module Plist_intf = Plist_intf
@@ -10,6 +10,13 @@ module Plist_intf = Plist_intf
 module Plist_sync_root_blk = Plist_sync_root_blk
 
 module Make_1 = Make_1
+
+module Make_3 = Make_3
+
+module Make_4 = Make_4
+
+
+
 
 (*
 let make : plist_marshal_info:('a, 'blk_id, 'blk, 'buf) plist_marshal_info ->
@@ -24,10 +31,4 @@ blk_ops:'blk blk_ops ->
           with_state:(('blk_id, 'buf) plist, 't) with_state ->
           (_, _, _, _) plist_ops ] ] = Make_1.make
 *)
-
-
-module Make_3 = Make_3
-
-module Make_4 = Make_4
-
 
