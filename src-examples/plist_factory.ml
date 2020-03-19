@@ -1,5 +1,6 @@
 (** Common instances of plist *)
 
+open Plist_intf
 open Marshal_factory
 
 (** Internal:
@@ -35,15 +36,15 @@ and ('a,'t) r1 = {
   plist_marshal_ops: ('a,M1.blk_id,M1.buf) plist_marshal_ops;
   plist_extra_ops: ('a,M1.buf,M1.blk_id,'t) plist_extra_ops;
   plist_ops: 
-    (('a, M1.blk_id, M1.buf) plist, lwt) with_state ->
-    ('a, M1.buf, M1.blk_id, M1.buf, 't) plist_ops;
+    ((M1.blk_id, M1.buf) plist, lwt) with_state ->
+    ('a, M1.buf, M1.blk_id, 't) plist_ops;
 }
 
 
 let make_1 (mshlr,blk_dev_ops) = 
   let open Plist_marshal_factory in
   let { plist_marshal_info; buf_ops; blk_ops } = make_3 mshlr in
-  Tjr_plist.make  ~plist_marshal_info ~buf_ops ~blk_ops |> fun (plist_marshal_ops,`K1 rest) -> 
+  Tjr_plist.Make_1.make  ~plist_marshal_info ~buf_ops ~blk_ops |> fun (plist_marshal_ops,`K1 rest) -> 
   rest ~monad_ops:lwt_monad_ops ~blk_dev_ops |> fun (plist_extra_ops,`K2 rest) -> 
   let plist_ops with_state = rest ~with_state in
   ({ plist_marshal_ops;plist_extra_ops; plist_ops }:('a,lwt)r1)

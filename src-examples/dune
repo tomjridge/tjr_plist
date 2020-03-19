@@ -1,5 +1,5 @@
 (env
-  (_ (flags (:standard -w -27 -open Tjr_lib -open Tjr_monad -open Tjr_fs_shared -open Tjr_plist))))
+  (_ (flags (:standard -w -27 -open Tjr_lib -open Tjr_monad -open Tjr_fs_shared -open Tjr_plist -open Plist_intf))))
 
 (library
   (public_name "tjr_plist_examples")

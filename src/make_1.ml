@@ -1,4 +1,6 @@
-(** We store the list of elts from offset off0 (say); the nxt pointer
+(** Construct a persistent list.
+
+We store the list of elts from offset off0 (say); the nxt pointer
    takes up the first off0 bytes. Assumes max size of marshalled
    blk_ptr is off0 bytes.
 
@@ -138,7 +140,7 @@ module Make(S:sig
                let extra_ops = { create_plist; read_plist; read_plist_tl } in
 
                (extra_ops, `K2(
-                    fun ~(with_state:(('a,blk_id,buf)plist,t) with_state) -> 
+                    fun ~(with_state:((blk_id,buf)plist,t) with_state) -> 
 
                       (* working with_state *)
 

@@ -71,7 +71,7 @@ end = struct
   let create_plist blk_id =
     create_plist blk_id >>= fun plist -> 
     let state = ref plist in
-    let with_state : ((int, blk_id_, ba_buf) plist,lwt) with_state = 
+    let with_state : ((blk_id_, ba_buf) plist,lwt) with_state = 
       let with_state f = f ~state:!state ~set_state:(fun s -> 
           state:=s; return ())
       in

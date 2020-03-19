@@ -142,7 +142,7 @@ module Make() = struct
     let _ = read_root_blk
 
     module With_pl(Y:sig 
-        val pl: (int, B.blk_id, ba_buf) plist 
+        val pl: (B.blk_id, ba_buf) plist 
         val min_free_blk_id: int
       end) 
       = (
@@ -150,10 +150,10 @@ module Make() = struct
 
         let min = ref Y.min_free_blk_id
 
-        let pl_to_rb (pl:('c,'a,'b)plist) : root_blk = 
+        let pl_to_rb (pl:('a,'b)plist) : root_blk = 
           { hd=pl.hd; tl=pl.tl; blk_len=pl.blk_len; min_free_blk_id= !min }
 
-        let pl_ref : (int, B.blk_id, ba_buf) plist ref = ref Y.pl
+        let pl_ref : (B.blk_id, ba_buf) plist ref = ref Y.pl
 
         let with_pl_ref =
           let with_state f = f ~state:(!pl_ref) ~set_state:(fun s -> pl_ref:=s; return ()) in
@@ -187,7 +187,7 @@ module Make() = struct
 
       end : sig
         val add : int list -> (unit, lwt) m
-        val plist_ops : (int, ba_buf, B.blk_id, ba_buf, lwt) plist_ops
+        val plist_ops : (int, ba_buf, B.blk_id, lwt) plist_ops
         val close_plist_and_blk_dev : unit -> (unit, lwt) m
       end)
 

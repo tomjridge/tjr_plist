@@ -1,6 +1,7 @@
 (* FIXME perhaps this would be better as a queue of blk_ids, and a
    self-throttling thread on one end *)
 
+open Plist_intf
 open Freelist_intf
 
 type ('elt,'blk_id,'t) version = 
@@ -40,7 +41,7 @@ module Make(S:S) = struct
         ~monad_ops
         ~event_ops
         ~(async:(unit,t)m -> (unit,t)m)
-        ~(plist:(elt,buf,blk_id,blk,t)plist_ops)
+        ~(plist:(elt,buf,blk_id,t)plist_ops)
         ~(with_freelist:(elt freelist,t)with_state)
         ~(root_block:(blk_id,t)root_block_ops)
         ~(version:version)

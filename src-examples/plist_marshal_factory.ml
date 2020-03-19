@@ -3,8 +3,9 @@
 (** NOTE unless otherwise specified, take blk_id to be int and blk_sz to be 4096. NOTE
    bin_prot favours bigarray as the buffer type *)
 
-(** Internal: blk and buf are ba_buf; ba4096 *)
+open Plist_intf
 
+(** Internal: blk and buf are ba_buf; ba4096 *)
 module Internal_ = struct
   type blk_id = Blk_id_as_int.blk_id
 
