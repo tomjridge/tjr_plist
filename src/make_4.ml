@@ -21,6 +21,14 @@ let make
             rest ~with_state |> fun (x:'a plist_ops) -> 
             x))))
 
+
+let make : plist_marshal_info:'a plist_marshal_info ->
+'a plist_marshal_ops *
+[> `K1 of
+     blk_dev_ops:std_blk_dev_ops ->
+     'a plist_extra_ops *
+     [> `K2 of with_state:(plist, t) Tjr_monad.with_state -> 'a plist_ops ] ] = make
+
 (*
   object
     method plist_marshal_ops=( (x#plist_marshal_ops): 'a plist_marshal_ops)

@@ -15,11 +15,13 @@ type sync_type = [ `Tl_only | `Tl_and_root_block ]
 
 *)
 
-type ('blk_id,'plist,'t) freelist_ops = {
+type fIXME
+
+type ('blk_id,'t) freelist_ops = {
   alloc      : unit -> ('blk_id,'t)m;
-  alloc_many : int -> ('plist,'t)m;
+  alloc_many : int -> (fIXME,'t)m;
   free       : 'blk_id -> (unit,'t)m;
-  free_many  : 'plist -> (unit,'t)m;
+  free_many  : fIXME -> (unit,'t)m;
   sync       : sync_type -> (unit,'t)m;
 }
 (** alloc_many: int is the number of blk_ids (although this sort-of

@@ -228,4 +228,36 @@ module Make(S:S) = struct
 
     { alloc; alloc_many; free; free_many; sync }
 
+
+  let _ = make
 end
+
+let make (type blk_id blk buf elt t) x : (elt,t)freelist_ops = 
+  let module S = struct
+    type nonrec blk_id = blk_id
+    type nonrec blk = blk
+    type nonrec buf = buf
+    type nonrec elt = elt
+    type nonrec t = t
+  end
+  in
+  let open (Make(S)) in
+  make ~monad_ops:(x#monad_ops)
+    ~event_ops:(x#event_ops)
+    ~async:(x#async)
+    ~plist:(x#plist)
+    ~with_freelist:(x#with_freelist)
+    ~root_block:(x#root_block)
+    ~version:(x#version)
+
+
+let make : 
+< async : (unit, 't) m -> (unit, 't) m;
+  event_ops : 't Tjr_monad.Event.event_ops;
+  monad_ops : 't monad_ops;
+  plist : ('elt, 'buf, 'blk_id, 't) plist_ops;
+  root_block : ('blk_id, 't) root_block_ops;
+  version : ('elt, 'blk_id, 't) version;
+  with_freelist : ('elt freelist, 't) with_state;
+> -> ('elt, 't) freelist_ops
+= make
