@@ -40,7 +40,7 @@ module Make(S:S) = struct
   let make 
         ~monad_ops
         ~event_ops
-        ~(async:(unit,t)m -> (unit,t)m)
+        ~(async:(unit -> (unit,t)m) -> (unit,t)m)
         ~(plist:(elt,buf,blk_id,t)plist_ops)
         ~(with_freelist:(elt freelist,t)with_state)
         ~(root_block:(blk_id,t)root_block_ops)
@@ -142,7 +142,7 @@ module Make(S:S) = struct
       >>= (function
           | false -> return ()
           | true -> 
-            let t = disk_thread () >>= fun _ -> failwith "FIXME we have to allocate from min_free_blk_id" in
+            let t () = disk_thread () >>= fun _ -> failwith "FIXME we have to allocate from min_free_blk_id" in
             (* FIXME add min_free_elt to freelist state *)
             async t) >>= fun () ->
 
@@ -232,6 +232,7 @@ module Make(S:S) = struct
   let _ = make
 end
 
+(**/**)
 let make (type blk_id blk buf elt t) x : (elt,t)freelist_ops = 
   let module S = struct
     type nonrec blk_id = blk_id
@@ -249,10 +250,10 @@ let make (type blk_id blk buf elt t) x : (elt,t)freelist_ops =
     ~with_freelist:(x#with_freelist)
     ~root_block:(x#root_block)
     ~version:(x#version)
-
+(**/**)
 
 let make : 
-< async : (unit, 't) m -> (unit, 't) m;
+< async : (unit -> (unit, 't) m) -> (unit, 't) m;
   event_ops : 't Tjr_monad.Event.event_ops;
   monad_ops : 't monad_ops;
   plist : ('elt, 'buf, 'blk_id, 't) plist_ops;
@@ -261,3 +262,19 @@ let make :
   with_freelist : ('elt freelist, 't) with_state;
 > -> ('elt, 't) freelist_ops
 = make
+(** 
+
+{[
+let make : 
+< async : (unit -> (unit, 't) m) -> (unit, 't) m;
+  event_ops : 't Tjr_monad.Event.event_ops;
+  monad_ops : 't monad_ops;
+  plist : ('elt, 'buf, 'blk_id, 't) plist_ops;
+  root_block : ('blk_id, 't) root_block_ops;
+  version : ('elt, 'blk_id, 't) version;
+  with_freelist : ('elt freelist, 't) with_state;
+> -> ('elt, 't) freelist_ops
+= make
+]}
+
+*)
