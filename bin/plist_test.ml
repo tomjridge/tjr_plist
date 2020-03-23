@@ -1,4 +1,5 @@
-open Plist_examples
+open Tjr_plist_examples
+open Tjr_plist_examples.Plist_examples
 
 type a = 
   (* | A1_ocaml_marshal *)

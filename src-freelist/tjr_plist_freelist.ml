@@ -8,6 +8,8 @@ module Make_2 = Make_2
 
 module Make_3 = Make_3
 
+module Freelist_example = Freelist_example
+
 
 (** {2 Summary} *)
 

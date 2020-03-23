@@ -31,17 +31,28 @@ type ('blk_id,'t) freelist_ops = {
 free_many: free an entire list of blk_ids, by appending to this
    freelist *)
 
+type 'a min_free_ops = {
+  min_free_alloc: 'a -> int -> 'a list * 'a
+}
+
 
 type 'a freelist = {
-  transient          : 'a list;
+  transient          : 'a list; 
+  min_free           : ('a * 'a min_free_ops) option;
+  
   waiting            : ('a Event.event list);
   disk_thread_active : bool;
 }
 (** The freelist state, in addition to the plist.
 
-transient: a non-persistent list of free elts that can be allocated
+- transient: a non-persistent list of free elts that can be allocated
 
-waiting: a list of threads waiting for a disk process to return
+- min_free: free elts are stored in transient, or in the on-disk plist;
+usually we also have an "upper bound", beyond which we can still
+allocate elts freely (an elt is either in transient, allocated to some
+object, in the plist, or geq min_free
+
+- waiting: a list of threads waiting for a disk process to return
 
 NOTE: we assume that the state is accessed via with_state, ie, only one thread at a time
 

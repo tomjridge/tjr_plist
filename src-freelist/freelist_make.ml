@@ -142,7 +142,42 @@ module Make(S:S) = struct
       >>= (function
           | false -> return ()
           | true -> 
-            let t () = disk_thread () >>= fun _ -> failwith "FIXME we have to allocate from min_free_blk_id" in
+            let t () = 
+              disk_thread () >>= fun x -> begin
+                match x with 
+                | `Finished -> return ()
+                | `Unfinished -> 
+                  Printf.printf "Disk thread did not allocate; now attempting to use min_free\n%!";
+                  with_freelist.with_state (fun ~state ~set_state -> 
+                      match state.min_free with
+                      | None -> failwith "FIXME at this point there are no free elements"
+                      | Some (elt,{min_free_alloc}) -> 
+                        (* put 1000+|waiting| free elts into transient *)
+                        let num_to_alloc = 1000+List.length state.waiting in
+                        Printf.printf "%s: num_to_alloc=%d\n%!" __FILE__ num_to_alloc;
+                        min_free_alloc elt num_to_alloc |> fun (elts,elt) -> 
+                        (* FIXME as well as set_state, we should record
+                           the new min_free elt on disk synchronously
+                           otherwise there is a danger that we crash and
+                           then reallocate some elts that have already
+                           been allocated *)
+                        Printf.printf "post disk_thread: adding new transients from min_free\n%!"; 
+                        (* remember to wake up any waiting *)
+                        (elts,state.waiting) |> iter_k (fun ~k (elts,waiting) ->
+                            match elts,waiting with
+                            | _,[] -> return (elts,[])
+                            | [],_ -> failwith "we need to allocate even more! FIXME"
+                            | e::elts,w::waiting -> 
+                              ev_signal w e >>= fun () ->
+                              k (elts,waiting)) >>= fun (elts,waiting) -> 
+                        Printf.printf "post disk_thread: setting state\n%!";
+                        set_state { transient=elts@state.transient; (* FIXME transient=[]?*)
+                                    waiting;
+                                    disk_thread_active=false; (* FIXME it clearer why this has to be here - the disk_thread finished long ago *)
+                                    min_free=Some(elt,{min_free_alloc}) }
+                    )
+              end
+            in
             (* FIXME add min_free_elt to freelist state *)
             async t) >>= fun () ->
 
@@ -155,6 +190,7 @@ module Make(S:S) = struct
             (* we need to have an invariant: after the disk thread
                runs and frees all the waiting threads, then the
                remaining transient elts are at least tr_lower *)
+            Printf.printf "%s: thread waits for transient free elt\n%!" __FILE__;
             ev_create () >>= fun (ev: elt Event.event) ->              
             set_state {s with waiting=ev::s.waiting } >>= fun () -> 
             (* NOTE do we have to release the state before waiting?
@@ -167,7 +203,7 @@ module Make(S:S) = struct
 
       (match x with
        | `Ev ev -> ev_wait ev
-       | `Elt elt -> return elt)      
+       | `Elt elt -> return elt)
     in
     let alloc_many n = failwith "FIXME" in
     

@@ -324,5 +324,36 @@ let make (type buf blk_id blk t) ~plist_marshal_info =
 
 let make ~(plist_marshal_info:('a, 'blk_id, 'blk, 'buf) plist_marshal_info) = make ~plist_marshal_info
 
-let _ = make
+let make : 
+plist_marshal_info:('a, 'blk_id, 'blk, 'buf)
+                   Tjr_plist__.Plist_intf.plist_marshal_info ->
+buf_ops:'buf Tjr_fs_shared.buf_ops ->
+blk_ops:'blk Tjr_fs_shared.blk_ops ->
+('a, 'blk_id, 'blk) Tjr_plist__.Plist_intf.plist_marshal_ops *
+[> `K1 of
+     monad_ops:'b Tjr_monad.monad_ops ->
+     blk_dev_ops:('blk_id, 'blk, 'b) Tjr_fs_shared.blk_dev_ops ->
+     ('a, 'buf, 'blk_id, 'b) Tjr_plist__.Plist_intf.plist_extra_ops *
+     [> `K2 of
+          with_state:(('blk_id, 'buf) Tjr_plist__.Plist_intf.plist, 'b)
+                     Tjr_monad.with_state ->
+          ('a, 'buf, 'blk_id, 'b) Tjr_plist__.Plist_intf.plist_ops ] ]
+= make
+(** {[
+let make : 
+plist_marshal_info:('a, 'blk_id, 'blk, 'buf)
+                   Tjr_plist__.Plist_intf.plist_marshal_info ->
+buf_ops:'buf Tjr_fs_shared.buf_ops ->
+blk_ops:'blk Tjr_fs_shared.blk_ops ->
+('a, 'blk_id, 'blk) Tjr_plist__.Plist_intf.plist_marshal_ops *
+[> `K1 of
+     monad_ops:'b Tjr_monad.monad_ops ->
+     blk_dev_ops:('blk_id, 'blk, 'b) Tjr_fs_shared.blk_dev_ops ->
+     ('a, 'buf, 'blk_id, 'b) Tjr_plist__.Plist_intf.plist_extra_ops *
+     [> `K2 of
+          with_state:(('blk_id, 'buf) Tjr_plist__.Plist_intf.plist, 'b)
+                     Tjr_monad.with_state ->
+          ('a, 'buf, 'blk_id, 'b) Tjr_plist__.Plist_intf.plist_ops ] ]
+= make
+]} *)
 

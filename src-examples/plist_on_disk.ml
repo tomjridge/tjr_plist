@@ -116,7 +116,7 @@ module Make() = struct
   module With_blk_dev(X:Blk_dev_factory.R6) = struct
     open X
 
-    module F = Plist_factory 
+    module F = Xx_plist_factory 
 
     let F.{plist_marshal_ops;plist_extra_ops;plist_ops} = 
       F.make_2 blk_dev_ops
@@ -215,7 +215,7 @@ module Test() = struct
     >>= fun () ->
     let module Y = 
       X.With_pl (struct let pl = pl let min_free_blk_id = 2 end) in
-    Y.add (List_.from_to 1 (ten_k+1)) >>= fun () ->
+    Y.add (List_.from_upto 1 (ten_k+1)) >>= fun () ->
     Y.close_plist_and_blk_dev () >>= fun () -> 
     
     (* now read back *)
@@ -232,7 +232,7 @@ module Test() = struct
     let module Y = 
       X.With_pl (struct let pl = pl let min_free_blk_id = n end) in
     (* let open Y in *)
-    Y.add (List_.from_to 20_001 30_000) >>= fun () ->
+    Y.add (List_.from_upto 20_001 30_000) >>= fun () ->
     Y.close_plist_and_blk_dev () >>= fun () -> 
     Printf.printf "plist_on_disk: test finished\n%!";
     return ()

@@ -40,7 +40,7 @@ end = struct
 
   let _ : (blk_id_,ba_buf,lwt) blk_dev_ops = blk_dev_ops
 
-  let Plist_factory.{plist_extra_ops;plist_ops=mk_plist_ops;_} =  Plist_factory.make_2 blk_dev_ops
+  let Xx_plist_factory.{plist_extra_ops;plist_ops=mk_plist_ops;_} =  Xx_plist_factory.make_2 blk_dev_ops
 
   let {create_plist;read_plist;read_plist_tl=_} = plist_extra_ops
     

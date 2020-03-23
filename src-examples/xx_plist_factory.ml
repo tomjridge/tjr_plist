@@ -1,4 +1,4 @@
-(** Common instances of plist *)
+(** Common instances of plist; FIXME deprecated - see Tjr_plist.Plist_factory *)
 
 open Plist_intf
 open Marshal_factory
