@@ -163,7 +163,8 @@ module Make(S:S) = struct
                            been allocated *)
                         Printf.printf "post disk_thread: adding new transients from min_free\n%!"; 
                         (* remember to wake up any waiting *)
-                        (elts,state.waiting) |> iter_k (fun ~k (elts,waiting) ->
+                        (* also remember to use state.transient first (which may be nonempty *)
+                        (state.transient@elts,state.waiting) |> iter_k (fun ~k (elts,waiting) ->
                             match elts,waiting with
                             | _,[] -> return (elts,[])
                             | [],_ -> failwith "we need to allocate even more! FIXME"
@@ -171,7 +172,7 @@ module Make(S:S) = struct
                               ev_signal w e >>= fun () ->
                               k (elts,waiting)) >>= fun (elts,waiting) -> 
                         Printf.printf "post disk_thread: setting state\n%!";
-                        set_state { transient=elts@state.transient; (* FIXME transient=[]?*)
+                        set_state { transient=elts; (* FIXME transient=[]? no, just < tr_lower *)
                                     waiting;
                                     disk_thread_active=false; (* FIXME it clearer why this has to be here - the disk_thread finished long ago *)
                                     min_free=Some(elt,{min_free_alloc}) }

@@ -86,18 +86,21 @@ module Run_example() = struct
     in
     
     (* at last, can actually start allocating *)
-    
+
+    let last = ref 0 in
     0 |> iter_k (fun ~k n ->
         match n >= 10_000 with
         | true -> return ()
         | false -> 
           freelist_ops.alloc () >>= fun i ->
           Printf.printf "Allocated blk_id: %d\n%!" i;
+          last:=i;
           k (n+1))
     >>= fun () ->
     file_ops.close fd >>= fun () ->
     (* FIXME nondet bug: sometimes we finish at 10001, sometimes at 10002 *)
     Printf.printf "NOTE that the first allocated blk_id is 2, so after 10k allocs, we expect to be at blkid 10_001\n%!";
+    assert(!last = 10_001);
     Printf.printf "Finished\n%!";
     return ()
 end
