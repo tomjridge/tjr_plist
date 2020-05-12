@@ -40,7 +40,7 @@ type 'a freelist = {
   transient          : 'a list; 
   min_free           : ('a * 'a min_free_ops) option;
   
-  waiting            : ('a Event.event list);
+  waiting            : ('a event list);
   disk_thread_active : bool;
 }
 (** The freelist state, in addition to the plist.

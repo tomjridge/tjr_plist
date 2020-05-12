@@ -49,7 +49,7 @@ module Make(S:S) = struct
     (* let For_arbitrary_elts blk_alloc = version in *)
     let ( >>= ) = monad_ops.bind in
     let return = monad_ops.return in
-    let Event.{ ev_create; ev_wait; ev_signal } = event_ops in
+    let { ev_create; ev_wait; ev_signal } = event_ops in
     let {add; _ } = plist in
 
     (* redefine add to use alloc if available *)
@@ -192,7 +192,7 @@ module Make(S:S) = struct
                runs and frees all the waiting threads, then the
                remaining transient elts are at least tr_lower *)
             Printf.printf "%s: thread waits for transient free elt\n%!" __FILE__;
-            ev_create () >>= fun (ev: elt Event.event) ->              
+            ev_create () >>= fun (ev: elt event) ->              
             set_state {s with waiting=ev::s.waiting } >>= fun () -> 
             (* NOTE do we have to release the state before waiting?
                yes; and we assume that if an event is fulfilled before
@@ -291,7 +291,7 @@ let make (type blk_id blk buf elt t) x : (elt,t)freelist_ops =
 
 let make : 
 < async : (unit -> (unit, 't) m) -> (unit, 't) m;
-  event_ops : 't Tjr_monad.Event.event_ops;
+  event_ops : 't event_ops;
   monad_ops : 't monad_ops;
   plist : ('elt, 'buf, 'blk_id, 't) plist_ops;
   root_block : ('blk_id, 't) root_block_ops;
@@ -304,7 +304,7 @@ let make :
 {[
 let make : 
 < async : (unit -> (unit, 't) m) -> (unit, 't) m;
-  event_ops : 't Tjr_monad.Event.event_ops;
+  event_ops : 't event_ops;
   monad_ops : 't monad_ops;
   plist : ('elt, 'buf, 'blk_id, 't) plist_ops;
   root_block : ('blk_id, 't) root_block_ops;

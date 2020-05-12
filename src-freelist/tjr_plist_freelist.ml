@@ -21,7 +21,7 @@ include Freelist_intf
 
 let make : 
 < async : (unit -> (unit, 't) m) -> (unit, 't) m;
-  event_ops : 't Tjr_monad.Event.event_ops;
+  event_ops : 't event_ops;
   monad_ops : 't monad_ops;
   plist : ('elt, 'buf, 'blk_id, 't) plist_ops;
   root_block : ('blk_id, 't) root_block_ops;
@@ -34,7 +34,7 @@ let make :
 {[
 let make : 
 < async : (unit -> (unit, 't) m) -> (unit, 't) m;
-  event_ops : 't Tjr_monad.Event.event_ops;
+  event_ops : 't event_ops;
   monad_ops : 't monad_ops;
   plist : ('elt, 'buf, 'blk_id, 't) plist_ops;
   root_block : ('blk_id, 't) root_block_ops;
