@@ -4,13 +4,13 @@ Various examples (fixed elt type). Also some code to exercise the
    functionality.
 
 *)
-open Plist_intf.Std_types
+open Sh_std_ctxt
 open Freelist_intf
 
 let int_plist_ops : 
   int Make_4.plist_marshal_ops *
   [> `K1 of
-       blk_dev_ops:Make_4.std_blk_dev_ops ->
+       blk_dev_ops:blk_dev_ops' ->
        int Make_4.plist_extra_ops *
        [> `K2 of
             with_state:(Make_4.plist, Make_4.t) with_state ->

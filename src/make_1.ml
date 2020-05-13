@@ -16,13 +16,14 @@ open Plist_intf
 
 [@@@warning "-26"] (* FIXME *)
 
-module Make(S:sig 
-    type buf
-    type blk_id
-    type blk
-    type t
-  end)
-= struct
+module type S = sig 
+  type buf
+  type blk_id
+  type blk
+  type t
+end
+
+module Make(S:S) = struct
   open S
   let make = fun 
     ~plist_marshal_info
@@ -307,6 +308,27 @@ module Make(S:sig
                       { add;add_if_room;sync_tl;blk_len;adv_hd;adv_tl;get_hd;get_tl;get_hd_tl;read_hd;append }))))
 
   let _ = make
+
+
+  let plist_factory ~buf_ops ~blk_ops ~plist_marshal_info : (_,_,_,_,_) plist_factory = 
+    make ~plist_marshal_info ~buf_ops ~blk_ops |> fun (plist_marshal_ops,`K1 rest) -> 
+    object
+      method buf_ops = buf_ops
+      method blk_ops = blk_ops
+      method plist_marshal_info = plist_marshal_info
+      method plist_marshal_ops = plist_marshal_ops
+      method with_blk_dev_ops = fun ~monad_ops ~blk_dev_ops -> 
+        rest ~monad_ops ~blk_dev_ops |> fun (plist_extra_ops,`K2 rest) -> 
+        object
+          method monad_ops = monad_ops
+          method blk_dev_ops = blk_dev_ops
+          method plist_extra_ops = plist_extra_ops
+          method with_state = fun with_state -> 
+            rest ~with_state
+        end
+    end
+
+  let _ = plist_factory
 end
 
 (**/**)
@@ -350,6 +372,7 @@ blk_ops:'blk Tjr_fs_shared.blk_ops ->
      monad_ops:'b Tjr_monad.monad_ops ->
      blk_dev_ops:('blk_id, 'blk, 'b) Tjr_fs_shared.blk_dev_ops ->
      ('a, 'buf, 'blk_id, 'b) Tjr_plist__.Plist_intf.plist_extra_ops *
+
      [> `K2 of
           with_state:(('blk_id, 'buf) Tjr_plist__.Plist_intf.plist, 'b)
                      Tjr_monad.with_state ->

@@ -58,9 +58,3 @@ NOTE: we assume that the state is accessed via with_state, ie, only one thread a
 
  *)
 
-module Std_types = struct
-  include Tjr_plist.Plist_intf.Std_types
-  type nonrec root_block_ops = (blk_id,t)root_block_ops
-  type nonrec 'a freelist_ops = ('a,t)freelist_ops
-  type nonrec 'a with_freelist=('a freelist,t)with_state
-end

@@ -1,5 +1,7 @@
 (** Like {!Make_2}, but combined with plist construction. *)
 
+open Freelist_intf
+
 open Make_2
 
 open Make_4
@@ -18,15 +20,15 @@ let make x =
     method with_freelist=(x#with_freelist)
   end)
 
-let make : < blk_dev_ops : std_blk_dev_ops;
+let make : < blk_dev_ops : blk_dev_ops';
   plist_marshal_info : 'a plist_marshal_info;
-  root_block : root_block_ops;
+  root_block : (_,_) root_block_ops;
   version : ('a, r,t)version;
-  with_freelist : 'a with_freelist;
+  with_freelist : ('a freelist,t) with_state;
   with_plist : (plist, t) with_state;
   > 
 ->
-'a freelist_ops
+('a,t) freelist_ops
   = make
 (** {[
 let make : < blk_dev_ops : std_blk_dev_ops;

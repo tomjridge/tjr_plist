@@ -4,18 +4,18 @@ odoc documentation not great on this module - prefer #show in top-level. *)
 
 (* open Plist_intf *)
 
-(* open Plist_intf.Std_types *)
+(* open Plist_intf.Sh_std_ctxt *)
 
-(** NOTE hidden include Plist_intf.Std_types, to make odoc output readable *)
+(** NOTE hidden include Plist_intf.Sh_std_ctxt, to make odoc output readable *)
 (**/**)
-include Plist_intf.Std_types
+include Pl_type_abbrevs
 (**/**)
 
 let make 
     ~(plist_marshal_info:'a plist_marshal_info)
   =
   Make_1.make ~plist_marshal_info ~buf_ops ~blk_ops |> fun (plist_marshal_ops, `K1 rest) ->
-  ((plist_marshal_ops:'a plist_marshal_ops), `K1(fun ~(blk_dev_ops:std_blk_dev_ops) ->
+  ((plist_marshal_ops:'a plist_marshal_ops), `K1(fun ~(blk_dev_ops:blk_dev_ops') ->
        rest ~monad_ops ~blk_dev_ops |> fun (plist_extra_ops, `K2 rest) ->
        ((plist_extra_ops:'a plist_extra_ops), `K2(fun ~(with_state:(plist,t)with_state) -> 
             rest ~with_state |> fun (x:'a plist_ops) -> 
@@ -25,7 +25,7 @@ let make
 let make : plist_marshal_info:'a plist_marshal_info ->
 'a plist_marshal_ops *
 [> `K1 of
-     blk_dev_ops:std_blk_dev_ops ->
+     blk_dev_ops:blk_dev_ops' ->
      'a plist_extra_ops *
      [> `K2 of with_state:(plist, t) Tjr_monad.with_state -> 'a plist_ops ] ] = make
 

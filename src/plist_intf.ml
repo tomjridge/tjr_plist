@@ -53,8 +53,6 @@ type ('a,'buf,'blk_id,'t) plist_extra_ops = {
   constructed
 *)
 
-(* - read_plist_blk: read a single blk from disk; typically at
-   creation time this is used to read the tl from disk *)
 
 type ('a,'blk_id) adv_hd = {
   old_hd   :'blk_id;
@@ -136,52 +134,21 @@ end
 include Plist_marshal_info
 
 
-    (* max_elt_sz    :int; *)
-    (* max_blk_id_sz :int; *)
-    (* m_elt         : 'a option -> 'buf*int -> 'buf*int; *)
-    (* u_elt         : 'buf -> int -> 'a option * int; *)
-    (* m_blk_id      : 'blk_id option -> 'buf*int -> 'buf*int; *)
-    (* u_blk_id      : 'buf -> int -> 'blk_id option*int; *)
 
-
-
-(*
-(** The result of making the plist *)
-module Ret_ = struct
-  type ('a,'blk_id,'blk,'buf,'t) ret_ = {
-    m_u_ops      : ('a, 'blk_id, 'blk) plist_marshal_ops;
-    extra_ops    : ('a,'buf,'blk_id,'t) plist_extra_ops;
-    plist_ops    : (('a, 'blk_id, 'buf) plist, 't) with_state ->
-      ('a,'buf,'blk_id,'blk,'t) plist_ops
-  }
-  (** What we return from making the plist; note that the [plist_ops]
-      require a [with_state] *)
-end
-include Ret_
-*)
-
-
-(* read_blk: we expect to be called on a blk_id that can be
-   unmarshalled (ie one that is part of some plist); note that it may
-   be possible that this succeeds on random blk data; use with care!
-   *)
-
-
-
-(** {2 With std types} *)
-
-module Std_types = struct
-  include Std_types
-
-  type nonrec 'a plist_marshal_info = ('a,blk_id,ba_buf,ba_buf)plist_marshal_info
-
-  type nonrec 'a plist_marshal_ops = ('a,blk_id,ba_buf)plist_marshal_ops
-
-  type nonrec 'a plist_extra_ops = ('a,ba_buf,blk_id,t)plist_extra_ops
-
-  type nonrec plist = (blk_id,ba_buf)plist
-
-  type nonrec 'a plist_ops = ('a,ba_buf,blk_id,t)plist_ops
-end
-
-
+(* assume buf_ops and blk_ops are given, and plist_marshal_info, and blk_dev_ops *)
+type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
+  buf_ops            :'buf buf_ops;
+  blk_ops            : 'blk blk_ops;
+  plist_marshal_info : ('a,'blk_id,'blk,'buf) plist_marshal_info;
+  plist_marshal_ops  : ('a,'blk_id,'blk) plist_marshal_ops; 
+  with_blk_dev_ops   :  
+    monad_ops   :'t monad_ops -> 
+    blk_dev_ops : ('blk_id,'blk,'t)blk_dev_ops 
+    -> <
+      monad_ops       : 't monad_ops;
+      blk_dev_ops     : ('blk_id,'blk,'t)blk_dev_ops;
+      plist_extra_ops : ('a,'buf,'blk_id,'t) plist_extra_ops;
+      with_state      : (('blk_id,'buf)plist,'t)with_state
+        -> ('a,'buf,'blk_id,'t)plist_ops;
+    >
+>
