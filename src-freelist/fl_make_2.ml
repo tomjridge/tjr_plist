@@ -1,4 +1,4 @@
-(** Like {!Freelist_make} but with [std_types] *)
+(** Like {!Fl_make} but with [std_types] *)
 
 (** NOTE hidden include Pl_type_abbrevs, to make odoc output readable *)
 
