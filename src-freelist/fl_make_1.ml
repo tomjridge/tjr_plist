@@ -4,12 +4,6 @@
 open Plist_intf
 open Freelist_intf
 
-type ('elt,'blk_id,'t) version = 
-  | For_blkids of { e2b:'elt -> 'blk_id; b2e: 'blk_id -> 'elt } 
-  (** The version to implement the blk freelist; the elts are actually blk_ids *)
-
-  | For_arbitrary_elts of { alloc: unit -> ('blk_id,'t)m; free: 'blk_id -> (unit,'t)m }
-  (** The version where the freelist provides the alloc and free blk functionality *)
 
 module type S = sig
 
@@ -43,7 +37,7 @@ module Make(S:S) = struct
         ~(async:(unit -> (unit,t)m) -> (unit,t)m)
         ~(plist:(elt,buf,blk_id,t)plist_ops)
         ~(with_freelist:(elt freelist,t)with_state)
-        ~(root_block:(blk_id,t)root_block_ops)
+        ~(root_block:(elt,blk_id,t)fl_root_ops)
         ~(version:version)
     = 
     (* let For_arbitrary_elts blk_alloc = version in *)
@@ -259,7 +253,8 @@ module Make(S:S) = struct
         plist.sync_tl () >>= fun () ->
         plist.get_hd () >>= fun hd ->
         plist.get_tl () >>= fun tl ->
-        root_block.write_freelist_roots ~hd ~tl >>= fun () ->
+        plist.blk_len () >>= fun blk_len ->
+        root_block.write_root {hd;tl;blk_len;min_free=failwith "FIXME"} >>= fun () ->
         root_block.sync ()
     in
 
@@ -294,7 +289,7 @@ let make :
   event_ops : 't event_ops;
   monad_ops : 't monad_ops;
   plist : ('elt, 'buf, 'blk_id, 't) plist_ops;
-  root_block : ('blk_id, 't) root_block_ops;
+  root_block : ('elt,'blk_id, 't) fl_root_ops;
   version : ('elt, 'blk_id, 't) version;
   with_freelist : ('elt freelist, 't) with_state;
 > -> ('elt, 't) freelist_ops

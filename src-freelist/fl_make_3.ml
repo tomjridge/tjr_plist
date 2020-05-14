@@ -1,13 +1,13 @@
-(** Like {!Make_2}, but combined with plist construction. *)
+(** Like {!Fl_make_2}, but combined with plist construction. *)
 
 open Freelist_intf
 
-open Make_2
+(* open Fl_make_2 *)
 
 open Make_4
 
 let make x = 
-  Make_2.make (object
+  Fl_make_2.make (object
     method plist=(
       Tjr_plist.Make_4.make ~plist_marshal_info:(x#plist_marshal_info)
       |> fun (plist_marshal_ops,`K1 rest) -> 
@@ -22,7 +22,7 @@ let make x =
 
 let make : < blk_dev_ops : blk_dev_ops';
   plist_marshal_info : 'a plist_marshal_info;
-  root_block : (_,_) root_block_ops;
+  root_block : (_,_,_) fl_root_ops;
   version : ('a, r,t)version;
   with_freelist : ('a freelist,t) with_state;
   with_plist : (plist, t) with_state;

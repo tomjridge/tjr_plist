@@ -64,6 +64,7 @@ type ('a,'blk_id) adv_hd = {
 type 'a or_error = ('a,unit) result
 
 (** plist operations which require the plist state from the monad *)
+(* $(PIPE2SH("""sed -n '/type[ ].*plist_ops/,/^}/p' >GEN.plist_ops.ml_""")) *)
 type ('a,'buf (* FIXME *),'blk_id,(* 'blk,*) 't) plist_ops = {
   add       : nxt:'blk_id -> elt:'a -> ('blk_id option,'t) m;
   add_if_room: 'a -> (bool,'t)m;
@@ -136,6 +137,7 @@ include Plist_marshal_info
 
 
 (* assume buf_ops and blk_ops are given, and plist_marshal_info, and blk_dev_ops *)
+(* $(PIPE2SH("""sed -n '/type[ ].*plist_factory/,/^>/p' >GEN.plist_factory.ml_""")) *)
 type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
   buf_ops            :'buf buf_ops;
   blk_ops            : 'blk blk_ops;
@@ -148,7 +150,13 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
       monad_ops       : 't monad_ops;
       blk_dev_ops     : ('blk_id,'blk,'t)blk_dev_ops;
       plist_extra_ops : ('a,'buf,'blk_id,'t) plist_extra_ops;
-      with_state      : (('blk_id,'buf)plist,'t)with_state
-        -> ('a,'buf,'blk_id,'t)plist_ops;
+      with_state      : (('blk_id,'buf)plist,'t)with_state -> 
+        ('a,'buf,'blk_id,'t)plist_ops;
+      from_disk       : <hd:'blk_id;tl:'blk_id;blk_len:int> -> 
+        (<
+          plist_ops:('a,'buf,'blk_id,'t)plist_ops;
+          with_plist: (('blk_id,'buf)plist,'t)with_state;
+          plist_ref: ('blk_id,'buf)plist ref;              
+        >,'t)m
     >
 >

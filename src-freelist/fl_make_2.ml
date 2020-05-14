@@ -6,26 +6,26 @@
 include Tjr_monad.With_lwt
 open Freelist_intf
 include Tjr_plist.Pl_type_abbrevs
-include Freelist_make
+include Fl_make_1
 
 let async f = from_lwt(Lwt.async (fun () -> to_lwt (f ())) |>fun () -> Lwt.return ()) (* FIXME move to With_lwt *)
 let event_ops = lwt_event_ops (* FIXME rename in With_lwt *)
 (**/**)
 
 let make x : ('a,_) freelist_ops = 
-  Freelist_make.make (object
+  Fl_make_1.make (object
     method async=async
     method event_ops=event_ops
     method monad_ops=monad_ops
     method plist : 'a plist_ops =(x#plist)
-    method root_block : (_,_)root_block_ops =(x#root_block)
+    method root_block : (_,_,_)fl_root_ops =(x#root_block)
     method version : ('a,r,t) version =(x#version)
     method with_freelist : ('a freelist,t)with_state =(x#with_freelist)
   end)
 
 let make : 
   < plist : 'a plist_ops; 
-    root_block : (r,t)root_block_ops;
+    root_block : ('a,r,t)fl_root_ops;
     version : ('a, r, t) version; 
     with_freelist : ('a freelist,t) with_state; > 
   ->

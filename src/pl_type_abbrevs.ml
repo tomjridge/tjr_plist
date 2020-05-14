@@ -14,5 +14,7 @@ type nonrec plist = (blk_id,ba_buf)plist
 
 type nonrec 'a plist_ops = ('a,ba_buf,blk_id,t)plist_ops
 
+type nonrec 'a plist_factory = ('a,blk_id,blk,ba_buf,t)plist_factory
+
 
 

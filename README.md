@@ -36,4 +36,4 @@ sys	0m0.015s
 ~~~
 
 
-* OCamldoc: <https://tomjridge.github.io/tjr_plist/tjr_plist/index.html>
+* OCamldoc: <https://tomjridge.github.io/ocamldocs>

@@ -1,47 +1,28 @@
-(** A freelist, based on plist; don't open this module. *)
+(** A freelist providing alloc and free, based on plist; safe to open this module. 
+
+{%html:
+<img src="https://docs.google.com/drawings/d/e/2PACX-1vT1LGM8Sm7USD8LF_CGLUVZ270PK4vk5LcBrENxjcebpRUYq4jxPpgCTzNFsIS8TOgrcsVvcbZcNJ-M/pub?w=974&amp;h=871">
+
+%}
+
+
+*)
+
 
 module Freelist_intf = Freelist_intf
 
-module Freelist_make = Freelist_make
+(** {2 Make functors} *)
 
-module Make_2 = Make_2
+module Fl_make_1 = Fl_make_1
 
-module Make_3 = Make_3
+module Fl_make_2 = Fl_make_2
+
+module Fl_make_3 = Fl_make_3
+
+
+(** {2 Example and summary} *)
 
 module Freelist_example = Freelist_example
 
 
-(** {2 Summary} *)
-
-open Tjr_plist.Plist_intf
-(* open Freelist_intf *)
-open Freelist_make
-
-include Freelist_intf
-
-let make : 
-< async : (unit -> (unit, 't) m) -> (unit, 't) m;
-  event_ops : 't event_ops;
-  monad_ops : 't monad_ops;
-  plist : ('elt, 'buf, 'blk_id, 't) plist_ops;
-  root_block : ('blk_id, 't) root_block_ops;
-  version : ('elt, 'blk_id, 't) version;
-  with_freelist : ('elt freelist, 't) with_state;
-> -> ('elt, 't) freelist_ops
-= make
-(** 
-
-{[
-let make : 
-< async : (unit -> (unit, 't) m) -> (unit, 't) m;
-  event_ops : 't event_ops;
-  monad_ops : 't monad_ops;
-  plist : ('elt, 'buf, 'blk_id, 't) plist_ops;
-  root_block : ('blk_id, 't) root_block_ops;
-  version : ('elt, 'blk_id, 't) version;
-  with_freelist : ('elt freelist, 't) with_state;
-> -> ('elt, 't) freelist_ops
-= make
-]}
-
-*)
+module Summary = Summary

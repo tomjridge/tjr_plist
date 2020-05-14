@@ -49,7 +49,7 @@ module Run_example() = struct
 
     (* freelist *)
     let root_block = {
-      write_freelist_roots=(fun ~hd ~tl -> 
+      write_root=(fun x -> 
           (* FIXME should really write into blk 0 *)
           Printf.printf "call to write_freelist_roots\n%!";
           return ());
@@ -60,7 +60,7 @@ module Run_example() = struct
     in
     (* NOTE this actually uses ints rather than blk_ids, since we are
        using int_plist_ops FIXME use blkid_plist_ops *)
-    let version = Freelist_make.For_blkids { 
+    let version = For_blkids { 
         e2b=(fun x -> B.of_int x); 
         b2e=(fun x -> B.to_int x) } 
     in
@@ -74,7 +74,7 @@ module Run_example() = struct
     (* let with_freelist = with_ref fl_ref in *)
     (* for the freelist, we need to ensure that it is actually locked *)
     let with_freelist = with_locked_ref fl_ref in
-    let freelist_ops = Make_2.(Freelist_make.make (object
+    let freelist_ops = Fl_make_2.(Fl_make_1.make (object
                                  method async=async
                                  method event_ops=event_ops
                                  method monad_ops=monad_ops
