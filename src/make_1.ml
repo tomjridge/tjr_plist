@@ -310,19 +310,19 @@ module Make(S:S) = struct
   let _ = make
 
 
-  let plist_factory ~buf_ops ~blk_ops ~plist_marshal_info : (_,_,_,_,_) plist_factory = 
+  let plist_factory ~monad_ops ~buf_ops ~blk_ops ~plist_marshal_info : (_,_,_,_,_) plist_factory = 
     make ~plist_marshal_info ~buf_ops ~blk_ops |> fun (plist_marshal_ops,`K1 rest) -> 
     object 
+      method monad_ops = monad_ops
       method buf_ops = buf_ops
       method blk_ops = blk_ops
       method plist_marshal_info = plist_marshal_info
       method plist_marshal_ops = plist_marshal_ops
-      method with_blk_dev_ops = fun ~monad_ops ~blk_dev_ops -> 
+      method with_blk_dev_ops = fun ~blk_dev_ops -> 
         rest ~monad_ops ~blk_dev_ops |> fun (plist_extra_ops,`K2 rest) -> 
         let ( >>= ) = monad_ops.bind in
         let return = monad_ops.return in
         object
-          method monad_ops = monad_ops
           method blk_dev_ops = blk_dev_ops
           method plist_extra_ops = plist_extra_ops
           method with_state = fun with_state -> 

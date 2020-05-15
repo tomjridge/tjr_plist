@@ -9,14 +9,19 @@ open Tjr_plist.Plist_intf
 
 - For_arbitrary_elts: which allocates and frees arbitrary elements; some other freelist of the first type provides the alloc and free blk functionality
 *)
+(* $(PIPE2SH("""sed -n '/type[ ].*version/,/^$/p' >GEN.version.ml_""")) *)
 type ('elt,'blk_id,'t) version = 
-  | For_blkids of { e2b:'elt -> 'blk_id; b2e: 'blk_id -> 'elt } 
+  | For_blkids of ('elt,'blk_id) for_blk_ids
   | For_arbitrary_elts of 
       { alloc: unit -> ('blk_id,'t)m; free: 'blk_id -> (unit,'t)m }
+and ('elt,'blk_id) for_blk_ids = 
+  { e2b:'elt -> 'blk_id; b2e: 'blk_id -> 'elt } 
 
-  (* write_freelist_roots : hd:'blk_id -> tl:'blk_id -> (unit,'t)m; *)
+
+(* write_freelist_roots : hd:'blk_id -> tl:'blk_id -> (unit,'t)m; *)
 
 
+(* $(PIPE2SH("""sed -n '/type[ ][^=]*fl_root_info/,/^}/p' >GEN.fl_root_info.ml_""")) *)
 type ('a,'blk_id) fl_root_info = {
   hd: 'blk_id;
   tl: 'blk_id;
@@ -24,7 +29,19 @@ type ('a,'blk_id) fl_root_info = {
   min_free: 'a option
 }
 
+
+(* $(PIPE2SH("""sed -n '/type[ ].*fl_root_mshlr/,/^$/p' >GEN.fl_root_mshlr.ml_""")) *)
+type ('a,'blk_id) fl_root_mshlr = ('a,'blk_id) fl_root_info bp_mshlr
+(** This type can be used to marshal the freelist root block; NOTE
+   this is effectively specialized to 'blk = 'buf = bigarray *)
+
+(* assume blk_dev_ops and blk_id given so that sync clearly refers to
+   the root block only (but implement with generically with explicit
+   params) *)
+
+(* $(PIPE2SH("""sed -n '/type[ ][^=]*fl_root_ops/,/^}$/p' >GEN.fl_root_ops.ml_""")) *)
 type ('a,'blk_id,'t) fl_root_ops = {
+  read_root  : unit -> ( ('a,'blk_id)fl_root_info, 't)m;
   write_root : ('a,'blk_id) fl_root_info -> (unit,'t)m;
   sync       : unit -> (unit,'t)m;
 }
@@ -94,28 +111,33 @@ NOTE: we assume that the state is accessed via with_state, ie, only one thread a
 *)
 
 
-(** This type can be used to marshal the freelist root block *)
-type ('a,'blk_id) fl_root_mshlr = 
-  ('blk_id * 'blk_id * int * 'a option) bp_mshlr
 
-(* assume monad ops etc given; assume blk_dev_ops given; assume
-   fl_root_mshlr given *)
+(* assume monad ops etc given; assume fl_root_ops given (and therefore
+   also blk_dev_ops and root blk_id); NOTE 'a and 'blk_id are
+   identified when working with the standard freelist *)
+
 (* $(PIPE2SH("""sed -n '/type[ ].*freelist_factory/,/^>/p' >GEN.freelist_factory.ml_""")) *)
 type ('a,'buf,'blk_id,'t) freelist_factory = <
-  fl_root_mshlr : ('a,'blk_id) fl_root_mshlr;
-  from_disk     : <
-    version     :('a, 'blk_id, 't) version;
-    fl_root_blk : 'blk_id
-  > -> 
-    < 
-      freelist_ops  : ('blk_id,'t)freelist_ops; 
+  version       : ('a, 'blk_id) for_blk_ids; 
+  (** NOTE specialized to 'a =iso= 'blk_id *)
+
+  fl_root_ops   : 
+    blk_dev_ops:('blk_id,'buf,'t)blk_dev_ops -> 
+    blk_id:'blk_id -> 
+    ('a,'blk_id,'t) fl_root_ops;
+  
+  with_ : 
+    blk_dev_ops:('blk_id,'buf,'t)blk_dev_ops -> 
+    fl_root_blk:'blk_id 
+    -> <
+      freelist_ops : ('a,'t)freelist_ops; 
       (** the freelist operations! *)
 
-      fl_root_ops   : ('a,'blk_id, 't) fl_root_ops; (** uses fl_root_mshlr *)
-      with_freelist : ('a freelist,'t)with_state;
+      fl_root_blk      : 'blk_id;
+      with_freelist : ('a freelist,'t) with_state;
       freelist_ref  : 'a freelist ref;
-      plist_ops     : ('a,'buf,'blk_id,'t)plist_ops;
-      with_plist    : (('blk_id,'buf)plist,'t)with_state;
+      plist_ops     : ('a,'buf,'blk_id,'t) plist_ops;
+      with_plist    : (('blk_id,'buf)plist,'t) with_state;
       plist_ref     : ('blk_id,'buf)plist ref;
-    >
+    >;
 >

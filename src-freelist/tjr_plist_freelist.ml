@@ -5,8 +5,9 @@
 
 %}
 
-
 *)
+
+include Summary
 
 
 module Freelist_intf = Freelist_intf

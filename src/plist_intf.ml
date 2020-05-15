@@ -139,15 +139,14 @@ include Plist_marshal_info
 (* assume buf_ops and blk_ops are given, and plist_marshal_info, and blk_dev_ops *)
 (* $(PIPE2SH("""sed -n '/type[ ].*plist_factory/,/^>/p' >GEN.plist_factory.ml_""")) *)
 type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
+  monad_ops          :'t monad_ops;
   buf_ops            :'buf buf_ops;
   blk_ops            : 'blk blk_ops;
   plist_marshal_info : ('a,'blk_id,'blk,'buf) plist_marshal_info;
   plist_marshal_ops  : ('a,'blk_id,'blk) plist_marshal_ops; 
   with_blk_dev_ops   :  
-    monad_ops   :'t monad_ops -> 
     blk_dev_ops : ('blk_id,'blk,'t)blk_dev_ops 
     -> <
-      monad_ops       : 't monad_ops;
       blk_dev_ops     : ('blk_id,'blk,'t)blk_dev_ops;
       plist_extra_ops : ('a,'buf,'blk_id,'t) plist_extra_ops;
       with_state      : (('blk_id,'buf)plist,'t)with_state -> 

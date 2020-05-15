@@ -49,6 +49,7 @@ module Run_example() = struct
 
     (* freelist *)
     let root_block = {
+      read_root=(fun () -> failwith "FIXME");
       write_root=(fun x -> 
           (* FIXME should really write into blk 0 *)
           Printf.printf "call to write_freelist_roots\n%!";

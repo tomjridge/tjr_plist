@@ -8,6 +8,7 @@ module type T = sig
   include S
       
   val plist_factory : 
+    monad_ops:t monad_ops -> 
     buf_ops:buf buf_ops ->
     blk_ops:blk blk_ops ->
     plist_marshal_info:('a, blk_id, blk, buf) plist_marshal_info ->

@@ -32,13 +32,13 @@ module Make(S:S) = struct
   (* NOTE we need a version which deals with blk_ids, and a version which deals with arbitrary elts *)
 
   let make 
-        ~monad_ops
-        ~event_ops
-        ~(async:(unit -> (unit,t)m) -> (unit,t)m)
-        ~(plist:(elt,buf,blk_id,t)plist_ops)
-        ~(with_freelist:(elt freelist,t)with_state)
-        ~(root_block:(elt,blk_id,t)fl_root_ops)
-        ~(version:version)
+      ~monad_ops
+      ~event_ops
+      ~(async:(unit -> (unit,t)m) -> (unit,t)m)
+      ~(plist:(elt,buf,blk_id,t)plist_ops)
+      ~(with_freelist:(elt freelist,t)with_state)
+      ~(root_block:(elt,blk_id,t)fl_root_ops)
+      ~(version:version)
     = 
     (* let For_arbitrary_elts blk_alloc = version in *)
     let ( >>= ) = monad_ops.bind in
@@ -168,7 +168,8 @@ module Make(S:S) = struct
                         Printf.printf "post disk_thread: setting state\n%!";
                         set_state { transient=elts; (* FIXME transient=[]? no, just < tr_lower *)
                                     waiting;
-                                    disk_thread_active=false; (* FIXME it clearer why this has to be here - the disk_thread finished long ago *)
+                                    disk_thread_active=false;
+                                    (* FIXME it clearer why this has to be here - the disk_thread finished long ago *)
                                     min_free=Some(elt,{min_free_alloc}) }
                     )
               end
@@ -178,30 +179,30 @@ module Make(S:S) = struct
 
       (* then try to get a free elt *)
       with_freelist.with_state (fun ~state:s ~set_state -> 
-        match s.transient with
-        | [] -> (
-            (* FIXME are we guaranteed that the disk thread is active? not necessarily *)
-            (* assert(s.disk_thread_active=true); *)
-            (* we need to have an invariant: after the disk thread
-               runs and frees all the waiting threads, then the
-               remaining transient elts are at least tr_lower *)
-            Printf.printf "%s: thread waits for transient free elt\n%!" __FILE__;
-            ev_create () >>= fun (ev: elt event) ->              
-            set_state {s with waiting=ev::s.waiting } >>= fun () -> 
-            (* NOTE do we have to release the state before waiting?
-               yes; and we assume that if an event is fulfilled before
-               waiting on it, the wait succeeds ie events are one-shot *)
-            return (`Ev ev))
-        | elt::transient -> 
-          set_state {s with transient} >>= fun () ->
-          return (`Elt elt)) >>= fun x ->
+          match s.transient with
+          | [] -> (
+              (* FIXME are we guaranteed that the disk thread is active? not necessarily *)
+              (* assert(s.disk_thread_active=true); *)
+              (* we need to have an invariant: after the disk thread
+                 runs and frees all the waiting threads, then the
+                 remaining transient elts are at least tr_lower *)
+              Printf.printf "%s: thread waits for transient free elt\n%!" __FILE__;
+              ev_create () >>= fun (ev: elt event) ->              
+              set_state {s with waiting=ev::s.waiting } >>= fun () -> 
+              (* NOTE do we have to release the state before waiting?
+                 yes; and we assume that if an event is fulfilled before
+                 waiting on it, the wait succeeds ie events are one-shot *)
+              return (`Ev ev))
+          | elt::transient -> 
+            set_state {s with transient} >>= fun () ->
+            return (`Elt elt)) >>= fun x ->
 
       (match x with
        | `Ev ev -> ev_wait ev
        | `Elt elt -> return elt)
     in
     let alloc_many n = failwith "FIXME" in
-    
+
     (* NOTE the following code is rather tricky; if we have an alloc
        provided, we use this to extend the list; otherwise we are
        working with elts as blk_ids, so we can use one of the elts as
@@ -234,17 +235,17 @@ module Make(S:S) = struct
 
     let free blk_id = 
       with_freelist.with_state (fun ~state:s ~set_state -> 
-        let transient = blk_id::s.transient in
-        match List.length transient >= tr_upper with
-        | true -> (
-            (* flush some to disk *)
-            transient |> List_.split_at ((tr_upper+tr_lower) / 2) |> fun (xs,ys) ->
-            free_elts xs >>= fun () ->
-            set_state {s with transient=ys })                
-        | false -> (
-            set_state {s with transient}))
+          let transient = blk_id::s.transient in
+          match List.length transient >= tr_upper with
+          | true -> (
+              (* flush some to disk *)
+              transient |> List_.split_at ((tr_upper+tr_lower) / 2) |> fun (xs,ys) ->
+              free_elts xs >>= fun () ->
+              set_state {s with transient=ys })                
+          | false -> (
+              set_state {s with transient}))
     in
-    
+
     let free_many pl = failwith "FIXME" in
 
     let sync = function
