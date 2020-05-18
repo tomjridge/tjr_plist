@@ -3,7 +3,7 @@
 (**
 
 {[
-$(INCLUDE_GEN())
+$(INCLUDE("GEN*"))
 ]}
 
 *)

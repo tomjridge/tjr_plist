@@ -3,6 +3,16 @@
 (**
 
 {[
+  val make: 
+    monad_ops     :(t monad_ops) ->     
+    event_ops     :t event_ops ->
+    async         :((unit -> (unit, t) m) -> (unit, t) m) ->
+    plist_ops     :(elt, buf, blk_id, t) plist_ops ->
+    with_freelist :(elt freelist, t) with_state ->
+    root_block    :(elt, blk_id, t) fl_root_ops ->
+    version       :(elt,blk_id,t)version -> 
+    (elt, t) freelist_ops
+
 type ('a,'blk_id) fl_root_info = {
   hd: 'blk_id;
   tl: 'blk_id;
@@ -25,25 +35,31 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
   version       : ('a, 'blk_id) for_blk_ids; 
   (** NOTE specialized to 'a =iso= 'blk_id *)
 
-  fl_root_ops   : 
-    blk_dev_ops:('blk_id,'buf,'t)blk_dev_ops -> 
-    blk_id:'blk_id -> 
-    ('a,'blk_id,'t) fl_root_ops;
+  read_root: 
+    blk_dev_ops :('blk_id,'buf,'t)blk_dev_ops -> 
+    blk_id      :'blk_id -> 
+    ( ('a,'blk_id)fl_root_info, 't)m;
   
-  with_ : 
-    blk_dev_ops:('blk_id,'buf,'t)blk_dev_ops -> 
-    fl_root_blk:'blk_id 
-    -> <
-      freelist_ops : ('a,'t)freelist_ops; 
-      (** the freelist operations! *)
+  write_root:
+    blk_dev_ops :('blk_id,'buf,'t)blk_dev_ops -> 
+    blk_id      :'blk_id -> 
+    ('a,'blk_id)fl_root_info -> 
+    (unit,'t)m;
 
-      fl_root_blk      : 'blk_id;
-      with_freelist : ('a freelist,'t) with_state;
-      freelist_ref  : 'a freelist ref;
-      plist_ops     : ('a,'buf,'blk_id,'t) plist_ops;
-      with_plist    : (('blk_id,'buf)plist,'t) with_state;
-      plist_ref     : ('blk_id,'buf)plist ref;
-    >;
+  with_: 
+    < blk_dev_ops   : ('blk_id,'buf,'t)blk_dev_ops;
+      plist_ops     :('a,'buf,'blk_id,'t) plist_ops;
+      with_freelist : ('a,'t)with_state;
+      fl_root_blk   : 'blk_id; 
+    >
+    -> ('a,'t)freelist_ops;
+
+  from_disk: 
+    < blk_dev_ops: ('blk_id,'buf,'t)blk_dev_ops;      
+      fl_root_blk: 'blk_id -> (('a,'t)freelist_ops,'t)m
+    >
+    -> ('a,'t)freelist_ops;
+
 >
 
 type ('elt,'blk_id,'t) version = 

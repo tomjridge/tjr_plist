@@ -7,15 +7,7 @@ Various examples (fixed elt type). Also some code to exercise the
 open Sh_std_ctxt
 open Freelist_intf
 
-let int_plist_ops : 
-  int Make_4.plist_marshal_ops *
-  [> `K1 of
-       blk_dev_ops:blk_dev_ops' ->
-       int Make_4.plist_extra_ops *
-       [> `K2 of
-            with_state:(Make_4.plist, Make_4.t) with_state ->
-            int Make_4.plist_ops ] ]
-  = Plist_factory.int_plist_ops
+let int_factory = Tjr_plist.pl_examples#int_plist_factory
 
 
 (** Run_example: We open a freelist on a file, allocate some blk_ids,
@@ -35,17 +27,15 @@ module Run_example() = struct
     let blk_dev_ops = Blk_dev_factory.make_5 fd in
 
     (* plist *)
-    let plist_extra_ops,rest = 
-      snd int_plist_ops |> fun (`K1 rest) ->
-      rest ~blk_dev_ops |> fun (plist_extra_ops,`K2 rest) ->
-      plist_extra_ops,rest
-    in
+    let x1 = int_factory#with_blk_dev_ops ~blk_dev_ops in
+    let plist_extra_ops = x1#plist_extra_ops in
+
     let b1 = B.of_int 1 in
     (* NOTE create_plist writes the empty list to blk *)
     plist_extra_ops.create_plist b1 >>= fun pl ->
     let pl_ref = ref pl in
     let with_state = with_ref pl_ref in
-    let plist_ops = rest ~with_state in
+    let plist_ops = x1#with_state with_state in
 
     (* freelist *)
     let root_block = {
@@ -75,17 +65,17 @@ module Run_example() = struct
     (* let with_freelist = with_ref fl_ref in *)
     (* for the freelist, we need to ensure that it is actually locked *)
     let with_freelist = with_locked_ref fl_ref in
-    let freelist_ops = Fl_make_2.(Fl_make_1.make (object
-                                 method async=async
-                                 method event_ops=event_ops
-                                 method monad_ops=monad_ops
-                                 method plist=plist_ops 
-                                 method root_block=root_block
-                                 method version=version
-                                 method with_freelist=with_freelist
-                               end))
+    let freelist_ops = Fl_make_1.make (object
+        method async=async
+        method event_ops=event_ops
+        method monad_ops=monad_ops
+        method plist_ops=plist_ops 
+        method root_block=root_block
+        method version=version
+        method with_freelist=with_freelist
+      end)
     in
-    
+
     (* at last, can actually start allocating *)
 
     let last = ref 0 in

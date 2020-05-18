@@ -17,11 +17,11 @@
 )
 
 
-(package 
-         (name tjr_plist_examples)
-         (synopsis "A persistent (on-disk) list (examples)")
-         (depends ocamlfind dune tjr_plist)
-)
+;; (package 
+;;          (name tjr_plist_examples)
+;;          (synopsis "A persistent (on-disk) list (examples)")
+;;          (depends ocamlfind dune tjr_plist)
+;; )
 
 (package 
          (name tjr_plist_freelist)

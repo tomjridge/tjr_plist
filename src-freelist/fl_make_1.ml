@@ -17,11 +17,32 @@ module type S = sig
 
 end
 
+module type T = sig
+  include S
+      
+  (* $(PIPE2SH("""sed -n '/val[ ]make:/,/freelist_ops/p' >GEN.fl_make_1.make.ml_""")) *)
+  val make: 
+    monad_ops     :(t monad_ops) ->     
+    event_ops     :t event_ops ->
+    async         :((unit -> (unit, t) m) -> (unit, t) m) ->
+    plist_ops     :(elt, buf, blk_id, t) plist_ops ->
+    with_freelist :(elt freelist, t) with_state ->
+    root_block    :(elt, blk_id, t) fl_root_ops ->
+    version       :(elt,blk_id,t)version -> 
+    (elt, t) freelist_ops
+
+end
+
+
+
+
 (* [@@@warning "-26-8"] (\* FIXME *\) *)
 
-module Make(S:S) = struct
+module Make(S:S) 
+  :  (T with type blk_id=S.blk_id and type blk=S.blk and type buf=S.buf and type elt=S.elt and type t=S.t) 
+= struct
 
-  open S
+  include S
 
   type nonrec version = (elt,blk_id,t)version
 
@@ -35,7 +56,7 @@ module Make(S:S) = struct
       ~monad_ops
       ~event_ops
       ~(async:(unit -> (unit,t)m) -> (unit,t)m)
-      ~(plist:(elt,buf,blk_id,t)plist_ops)
+      ~(plist_ops:(elt,buf,blk_id,t)plist_ops)
       ~(with_freelist:(elt freelist,t)with_state)
       ~(root_block:(elt,blk_id,t)fl_root_ops)
       ~(version:version)
@@ -44,7 +65,7 @@ module Make(S:S) = struct
     let ( >>= ) = monad_ops.bind in
     let return = monad_ops.return in
     let { ev_create; ev_wait; ev_signal } = event_ops in
-    let {add; _ } = plist in
+    let {add; _ } = plist_ops in
 
     (* redefine add to use alloc if available *)
     let version = match version with
@@ -79,10 +100,10 @@ module Make(S:S) = struct
     let disk_thread () = 
       (* we need to: read elts from hd, advance hd, sync hd, signal waiters *)
       let step () = 
-        plist.adv_hd () >>= function
+        plist_ops.adv_hd () >>= function
         | Error () -> return `End_of_plist 
         | Ok {old_hd; old_elts; _ } -> (
-            plist.sync_tl () >>= fun () ->
+            plist_ops.sync_tl () >>= fun () ->
 
             (* maybe free old_hd (or, if we are dealing with the
                freelist itself, add to elts) *)
@@ -222,13 +243,13 @@ module Make(S:S) = struct
               match xs with
               | [] -> return ()
               | [e] -> (
-                  plist.add_if_room e >>= function
+                  plist_ops.add_if_room e >>= function
                   | true -> return ()
                   | false -> (
                       (* so use this e as the nxt blk *)
-                      plist.adv_tl (e2b e)))
+                      plist_ops.adv_tl (e2b e)))
               | x1::x2::xs -> (
-                  plist.add ~nxt:(e2b x2) ~elt:x1 >>= function
+                  plist_ops.add ~nxt:(e2b x2) ~elt:x1 >>= function
                   | None -> k xs
                   | Some x2 -> k ((b2e x2)::xs)) ))
     in
@@ -249,21 +270,54 @@ module Make(S:S) = struct
     let free_many pl = failwith "FIXME" in
 
     let sync = function
-      | `Tl_only -> plist.sync_tl ()
+      | `Tl_only -> plist_ops.sync_tl ()
       | `Tl_and_root_block -> 
-        plist.sync_tl () >>= fun () ->
-        plist.get_hd () >>= fun hd ->
-        plist.get_tl () >>= fun tl ->
-        plist.blk_len () >>= fun blk_len ->
+        plist_ops.sync_tl () >>= fun () ->
+        plist_ops.get_hd () >>= fun hd ->
+        plist_ops.get_tl () >>= fun tl ->
+        plist_ops.blk_len () >>= fun blk_len ->
         root_block.write_root {hd;tl;blk_len;min_free=failwith "FIXME"} >>= fun () ->
         root_block.sync ()
     in
 
     { alloc; alloc_many; free; free_many; sync }
 
-
-  let _ = make
 end
+
+(** Make without functor *)
+let make (type blk_id blk buf elt t) x : (elt,t)freelist_ops = 
+  let module S = struct
+    type nonrec blk_id = blk_id
+    type nonrec blk = blk
+    type nonrec buf = buf
+    type nonrec elt = elt
+    type nonrec t = t
+  end
+  in
+  let open (Make(S)) in
+  make ~monad_ops:(x#monad_ops)
+    ~event_ops:(x#event_ops)
+    ~async:(x#async)
+    ~plist_ops:(x#plist_ops)
+    ~with_freelist:(x#with_freelist)
+    ~root_block:(x#root_block)
+    ~version:(x#version)
+
+
+let _ = make
+
+(*
+  
+  let _ :
+monad_ops:t Tjr_monad.monad_ops ->
+event_ops:t Tjr_monad.event_ops ->
+async:((unit -> (unit, t) Tjr_monad.m) -> (unit, t) Tjr_monad.m) ->
+plist:(elt, buf, blk_id, t) Tjr_plist.Plist_intf.plist_ops ->
+with_freelist:(elt Tjr_plist_freelist__.Freelist_intf.freelist, t)
+              Tjr_monad.with_state ->
+root_block:(elt, blk_id, t) Tjr_plist_freelist__.Freelist_intf.fl_root_ops ->
+version:version -> (elt, t) Tjr_plist_freelist__.Freelist_intf.freelist_ops
+= make
 
 (**/**)
 let make (type blk_id blk buf elt t) x : (elt,t)freelist_ops = 
@@ -310,4 +364,5 @@ let make :
 = make
 ]}
 
+*)
 *)

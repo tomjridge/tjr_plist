@@ -1,5 +1,9 @@
 (** Like {!Fl_make} but with [std_types] *)
 
+(* FIXME We don't really need this as a separate module - just add as a binding in top-level module *)
+
+
+
 (** NOTE hidden include Pl_type_abbrevs, to make odoc output readable *)
 
 (**/**)

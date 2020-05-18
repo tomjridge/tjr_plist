@@ -112,20 +112,44 @@ NOTE: we assume that the state is accessed via with_state, ie, only one thread a
 
 
 
-(* assume monad ops etc given; assume fl_root_ops given (and therefore
-   also blk_dev_ops and root blk_id); NOTE 'a and 'blk_id are
-   identified when working with the standard freelist *)
+(* assume monad ops,event_ops and async and version and fl_root_mshlr
+   given; NOTE 'a and 'blk_id are identified when working with the
+   standard freelist *)
 
 (* $(PIPE2SH("""sed -n '/type[ ].*freelist_factory/,/^>/p' >GEN.freelist_factory.ml_""")) *)
 type ('a,'buf,'blk_id,'t) freelist_factory = <
   version       : ('a, 'blk_id) for_blk_ids; 
   (** NOTE specialized to 'a =iso= 'blk_id *)
 
-  fl_root_ops   : 
-    blk_dev_ops:('blk_id,'buf,'t)blk_dev_ops -> 
-    blk_id:'blk_id -> 
-    ('a,'blk_id,'t) fl_root_ops;
+  read_root: 
+    blk_dev_ops :('blk_id,'buf,'t)blk_dev_ops -> 
+    blk_id      :'blk_id -> 
+    ( ('a,'blk_id)fl_root_info, 't)m;
   
+  write_root:
+    blk_dev_ops :('blk_id,'buf,'t)blk_dev_ops -> 
+    blk_id      :'blk_id -> 
+    ('a,'blk_id)fl_root_info -> 
+    (unit,'t)m;
+
+  with_: 
+    < blk_dev_ops   : ('blk_id,'buf,'t)blk_dev_ops;
+      plist_ops     :('a,'buf,'blk_id,'t) plist_ops;
+      with_freelist : ('a,'t)with_state;
+      fl_root_blk   : 'blk_id; 
+    >
+    -> ('a,'t)freelist_ops;
+
+  from_disk: 
+    < blk_dev_ops: ('blk_id,'buf,'t)blk_dev_ops;      
+      fl_root_blk: 'blk_id -> (('a,'t)freelist_ops,'t)m
+    >
+    -> ('a,'t)freelist_ops;
+
+>
+
+
+(*  
   with_ : 
     blk_dev_ops:('blk_id,'buf,'t)blk_dev_ops -> 
     fl_root_blk:'blk_id 
@@ -140,4 +164,4 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
       with_plist    : (('blk_id,'buf)plist,'t) with_state;
       plist_ref     : ('blk_id,'buf)plist ref;
     >;
->
+*)
