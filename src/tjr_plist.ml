@@ -11,19 +11,14 @@ respecting explicit syncs):
 
 - sync on every add
 
-- sync on moving to a new tl; if we assume the blk_dev respects write
-  order, we don't need to sync of course (we initialize new blk, write
-  old blk with pointer, and advance to new); but this doesn't
-  guarantee the writes are on the disk (just that the on-disk
-  structure is consistent with some prior state)
+- sync on moving to a new tl
 
-The point of the plist is that we can move to a new tl blk without
-necessarily rewriting any pointers outside the 2 plist tl blocks, but
-the price is that we have to traverse the entire list when we recover.
+The current implementation syncs when moving to a new tail, not on every add. The sequence of operations is:
 
-For the cost of one extra block write (for 3 synchronized block writes), we can sync the plist root block as well (ie the block that record hd, tl and len).
+- Allocate new tail block and initialize it; sync 
+- Update current tail block with next pointer to new tail; sync
+- Update in-memory state so that the new tail becomes the "current" tail
 
-The freelist goes a step further to try to minimize costly disk interaction: it maintains a set of free blks, and only when these get low does it (asynchronously) try to replenish from disk. The cost of this is that a crash will result in some orphaned/lost blocks that can only be recovered by an fsck-like scan or some other mechanism. However, the assumption is that crashes are rare, and that the blk device is large enough that some lost blocks are not too much of an issue.
 
 *)
 
@@ -34,11 +29,8 @@ module Plist_intf = Plist_intf
 (* $(FIXME("prefer to access the roots directly rather than hooking?")) *)
 module Plist_sync_root_blk = Plist_sync_root_blk
 
-(** NOTE hidden doc for [Make_1] *)
 
-(**/**)
 module Make_1 = Make_1
-(**/**)
 
 module Make_5 = Make_5
 

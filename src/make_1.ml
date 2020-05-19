@@ -9,6 +9,17 @@ We store the list of elts from offset off0 (say); the nxt pointer
     with the None pointer.
 
 
+Plist block structure:
+
+{%html:
+<img width='100%' src="https://docs.google.com/drawings/d/e/2PACX-1vS3avt7A5v-_ormHZlUYMIjUtOQ63U5tL4nDgHkIVI8VXqraTu6ClOCmYcMy3HeS5dCT-6LYpAYFgAC/pub?w=1033&amp;h=312">
+%}
+
+Some invariants: 
+
+- adding an element, or setting the nxt pointer, marshals immediately
+- the EOL marker is only marshalled when syncing the block (presumably to avoid repeated marshalling of this marker)
+
   *)
 
 
@@ -23,7 +34,7 @@ module type S = sig
   type t
 end
 
-[@@@warning "-32"] (* unused value *)
+(* [@@@warning "-32"] (\* unused value *\) *)
 
 module Make(S:S) = struct
   open S
@@ -32,29 +43,36 @@ module Make(S:S) = struct
     ~(buf_ops:buf buf_ops)
     ~(blk_ops:blk blk_ops)
     -> 
-      let open (struct
-        let { create;get;len=_FIXME; _} = buf_ops 
-        let { blk_sz;of_bytes;to_bytes;of_string;_ } = blk_ops
+
+      (*****************************************
+       * Start with basic marshalling routines *
+       *****************************************)
+
+      let module A = struct
+        let { create;get=_;len=_FIXME; _} = buf_ops 
+        let { blk_sz;of_bytes=_;to_bytes=_;of_string;_ } = blk_ops
         let { elt_mshlr; blk_id_mshlr; blk_to_buf; buf_to_blk } = 
           plist_marshal_info 
         let buf_sz = Blk_sz.to_int blk_sz 
-        let buf_space ~off = buf_sz - off 
+        let _buf_space ~off = buf_sz - off 
         let can_fit ~off ~n = off+n<=buf_sz 
 
         let max_blk_id_sz = blk_id_mshlr.max_elt_sz 
         let max_elt_sz = elt_mshlr.max_elt_sz 
 
-        let elts_offset0 = max_blk_id_sz 
+        (* The offset where we start writing elements *)
+        let off0 = max_blk_id_sz 
+
         let _ = 
           assert(blk_sz = blk_sz_4096);
-          assert(can_fit ~off:elts_offset0 ~n:(2*max_elt_sz)); 
+          assert(can_fit ~off:off0 ~n:(2*max_elt_sz)); 
           ()
         (* can fit 2 elts at least - including the None end of list marker *)
 
         (* we need to fit an elt and a None list terminator *)
         let can_fit_elt off = can_fit ~off ~n:(2*max_elt_sz) 
 
-        let empty_blk () = String.make buf_sz chr0 |> of_string
+        let _empty_blk () = String.make buf_sz chr0 |> of_string
 
         let m_blk_id = blk_id_mshlr.mshl 
         let u_blk_id = blk_id_mshlr.umshl
@@ -62,13 +80,17 @@ module Make(S:S) = struct
         let u_elt = elt_mshlr.umshl
 
 
-        (* NOTE returns the offset pointing to the None end-of-list marker *)
+
+        (* These x_to_... functions marshal the whole lot at once,
+           whereas typically we only marshal elts one at a time *)
+        (* NOTE this returns the offset pointing to the None
+           end-of-list marker *)
         let x_to_buf (elts,nxt) : buf*int = 
           (* write nxt *)
           create buf_sz |> fun buf ->
           (buf,0) |> m_blk_id nxt |> fun (buf,i) -> 
           assert(i<=max_blk_id_sz);
-          (buf,elts_offset0,elts) |> iter_k (fun ~k (buf,off,elts) ->
+          (buf,off0,elts) |> iter_k (fun ~k (buf,off,elts) ->
               assert(can_fit_elt off);
               match elts with 
               | [] -> 
@@ -81,7 +103,7 @@ module Make(S:S) = struct
         (* FIXME this assumes that the buf has a trailing None *)
         let buf_to_x buf = 
           0 |> u_blk_id buf |> fun (nxt,_) -> 
-          (elts_offset0,[]) |> iter_k (fun ~k (off,acc) -> 
+          (off0,[]) |> iter_k (fun ~k (off,acc) -> 
               u_elt buf off |> fun (e,off) -> 
               match e with 
               | None -> (List.rev acc,off)  (* note return pointer to None *)
@@ -95,23 +117,37 @@ module Make(S:S) = struct
         let blk_to_x blk = blk_to_buf blk |> buf_to_x 
 
         let m_u_ops = {marshal=x_to_blk; unmarshal=blk_to_x }
-      end)
+      end
       in
 
       object
         (* method m_u_ops = m_u_ops (\* plist_marshal_ops? *\) *)
-        method plist_marshal_ops = m_u_ops
+        method plist_marshal_ops = A.m_u_ops
         method with_ = fun 
           ~monad_ops
           ~(blk_dev_ops:(blk_id,blk,t)blk_dev_ops)
+          ~(sync: unit -> (unit,t)m)
           ->
+            
+            (************************************
+             * Now incorporate the block device *
+             ************************************)
+
             let open (struct
               let ( >>= ) = monad_ops.bind 
               let return = monad_ops.return 
               let { write; read; _ } = blk_dev_ops 
 
-              let create_plist blk_id = 
-                x_to_buf ([],None) |> fun (buf,off) -> 
+              let write_sync ~blk_id ~blk = 
+                write ~blk_id ~blk >>= fun () ->
+                sync ()
+
+            end)
+            in
+            let module B = struct
+
+              let mk_empty blk_id = 
+                A.x_to_buf ([],None) |> fun (buf,off) -> 
                 let pl = { hd=blk_id;
                            tl=blk_id;
                            blk_len=1;
@@ -121,16 +157,16 @@ module Make(S:S) = struct
                            dirty=true;
                          }
                 in
-                let blk = buf_to_blk buf in
-                write ~blk_id ~blk >>= fun () ->
+                let blk = A.buf_to_blk buf in
+                write_sync ~blk_id ~blk >>= fun () ->
                 return {pl with dirty=false}
 
 
               (* FIXME rename to eg read_entire_plist *)
-              let read_plist blk_id = 
+              let init_from_head blk_id = 
                 (blk_id,[]) |> iter_k (fun ~k (blk_id,acc) -> 
                     read ~blk_id >>= fun blk ->
-                    blk_to_x blk |> fun (elts,nxt) ->
+                    A.blk_to_x blk |> fun (elts,nxt) ->
                     match nxt with 
                     | None -> 
                       let acc = (elts,nxt)::acc in
@@ -139,55 +175,58 @@ module Make(S:S) = struct
 
 
               (* FIXME rename to eg create_plist_from_tl *)
-              let read_plist_tl ~hd ~tl ~blk_len = 
+              let init_from_endpts ~hd ~tl ~blk_len = 
                 read ~blk_id:tl >>= fun blk ->
-                blk_to_x blk |> fun (elts,nxt) ->
-                (elts,nxt) |> x_to_buf |> fun (buf,off) ->                  
+                A.blk_to_x blk |> fun (elts,nxt) ->
+                (elts,nxt) |> A.x_to_buf |> fun (buf,off) ->                  
                 return { hd; tl; buffer=buf; off; blk_len; dirty=false }
-
-
-
-              let extra_ops = { create_plist; read_plist; read_plist_tl } 
-
-            end)
+                  
+            end
             in
-            object
-              method plist_extra_ops=extra_ops
+            object (self)
+                   
+              (*****************************************************************
+               * Initialization and constructing the operations via with-state *
+               *****************************************************************)
+
+              (* method plist_extra_ops=extra_ops *)
+              method init = object
+                method mk_empty = B.mk_empty
+                method from_hd = B.init_from_head
+                method from_endpts = fun pl_root_info -> 
+                  let Pl_root_info.{hd;tl;blk_len} = pl_root_info in
+                  B.init_from_endpts ~hd ~tl ~blk_len >>= fun plist ->
+                  let r = ref plist in
+                  let with_state = Tjr_monad.with_imperative_ref ~monad_ops r in            
+                  let plist_ops = self#with_state ~with_state in
+                  return (object 
+                    method plist = plist
+                    method plist_ref = r
+                    method with_plist = with_state
+                    method plist_ops = plist_ops
+                  end)     
+              end
               method with_state=fun ~(with_state:((blk_id,buf)plist,t) with_state) -> 
                 let open (struct
+
                   (* working with_state *)
-
-                  let clear_nxt_blk blk_id = 
-                    x_to_blk ([],None) |> fun blk ->
-                    write ~blk_id ~blk
-
-                  let add_elt_list_terminator off buf = 
-                    (buf,off) |> m_elt None |> fun (buf,_) -> 
-                    buf
-
-                  (* invariant: if tl not written to disk yet, then tl_dirty is true *)
-                  let sync' ~state = 
-                    let { tl; buffer=buf; dirty; off; _ } = state in
-                    match dirty with
-                    | true -> (
-                        (* marshal None at off *)
-                        add_elt_list_terminator off buf |> fun buf ->
-                        write ~blk_id:tl ~blk:(buf_to_blk buf) >>= fun () ->
-                        return {state with dirty=false })
-                    | false -> return state
+                  
+                  (***************************
+                   * State passing functions *
+                   ***************************)
 
                   (* add element in tl; don't use blk_dev *)
                   let add_elt ~state ~elt = 
                     let buf,off = state.buffer,state.off in
-                    assert(can_fit_elt off);
+                    assert(A.can_fit_elt off);
                     (* write an elt and update the pointer offset *)
-                    (buf,off) |> m_elt (Some elt) |> fun (buf,off) -> 
+                    (buf,off) |> A.m_elt (Some elt) |> fun (buf,off) -> 
                     {state with buffer=buf; off; dirty=true}
 
                   (* don't use blk_dev *)
                   let set_nxt nxt buf =
                     (* update nxt first *)
-                    (buf,0) |> m_blk_id nxt |> fun (buf,_) -> 
+                    (buf,0) |> A.m_blk_id nxt |> fun (buf,_) -> 
                     buf
 
                   (* don't use blk_dev *)
@@ -195,75 +234,30 @@ module Make(S:S) = struct
                     (* assert(buf_to_x state.buffer |> snd = nxt); *)
                     { hd; tl=nxt; blk_len; buffer=buf; off; (* nxt_is_none=true; *) dirty }
 
-                  let add_if_room elt = 
-                    with_state.with_state (fun ~state ~set_state ->
-                        let { off; _ } = state in
-                        match can_fit_elt off with
-                        | true -> add_elt ~state ~elt |> fun s ->
-                                  set_state s >>= fun () ->
-                                  return true
-                        | false -> return false)
 
-                  let add = 
-                    fun ~nxt ~elt ->
-                    with_state.with_state (fun ~state ~set_state ->
-                        let { off; _ } = state in
-                        match can_fit ~off ~n:(2*max_elt_sz) with
-                        | true -> (
-                            add_elt ~state ~elt |> fun state ->
-                            set_state state >>= fun () ->
-                            return (Some nxt))
-                        | false -> (
-                            (* write the new blk first *)
-                            x_to_buf ([elt],None) |> fun (buf,off) ->
-                            write ~blk_id:nxt ~blk:(buf_to_blk buf) >>= fun () ->
-                            (* write old blk with nxt *)
-                            let blk_id = state.tl in
-                            let buf' = state.buffer |> set_nxt (Some nxt)
-                                       |> add_elt_list_terminator state.off
-                            in
-                            write ~blk_id ~blk:(buf' |> buf_to_blk) >>= fun () ->
-                            move_to_nxt ~hd:state.hd ~nxt ~blk_len:(state.blk_len+1) ~buf ~off ~dirty:false 
-                            |> set_state >>= fun () ->
-                            return None))
+                  let add_elt_list_terminator off buf = 
+                    (buf,off) |> A.m_elt None |> fun (buf,_) -> 
+                    buf
 
-                  let sync_tl =
-                    fun () ->
-                    with_state.with_state (fun ~state ~set_state ->
-                        let { tl=blk_id; buffer=buf; off; dirty; _ } = state in
-                        buf |> add_elt_list_terminator off |> fun buf ->
-                        write ~blk_id ~blk:(buf_to_blk buf) >>= fun () ->
-                        set_state {state with buffer=buf; dirty=false})
+                  
+                  (*********************************************
+                   * Functions that don't use the block device *
+                   *********************************************)
 
                   let blk_len () = 
                     with_state.with_state (fun ~state ~set_state ->
                         return state.blk_len)
 
-                  let adv_hd () = 
+                  let add_if_room elt = 
                     with_state.with_state (fun ~state ~set_state ->
-                        let { hd; _ } = state in
-                        read ~blk_id:hd >>= fun old_blk ->
-                        old_blk |> blk_to_x |> fun (elts,nxt) ->        
-                        match nxt with
-                        | None -> return (Error ())
-                        | Some new_hd -> 
-                          set_state { state with hd=new_hd;blk_len=state.blk_len-1 } >>= fun () ->
-                          return (Ok { old_hd=hd; old_elts=elts; new_hd }))
+                        let { off; _ } = state in
+                        match A.can_fit_elt off with
+                        | true -> add_elt ~state ~elt |> fun s ->
+                                  set_state s >>= fun () ->
+                                  return true
+                        | false -> return false)
 
-                  let adv_tl nxt = 
-                    with_state.with_state (fun ~state ~set_state ->
-                        (* write the new blk first *)
-                        x_to_buf ([],None) |> fun (buf,off) ->
-                        write ~blk_id:nxt ~blk:(buf_to_blk buf) >>= fun () ->
-                        (* write old blk with nxt *)
-                        let blk_id = state.tl in
-                        let buf' = state.buffer |> set_nxt (Some nxt)
-                                   |> add_elt_list_terminator state.off
-                        in
-                        write ~blk_id ~blk:(buf' |> buf_to_blk) >>= fun () ->
-                        move_to_nxt ~hd:state.hd ~nxt ~blk_len:(state.blk_len+1) ~buf ~off ~dirty:false
-                        |> set_state >>= fun () ->
-                        return ())
+                  (* $(FIXME("The following should be a single function returning the hd,tl,blk_len")) *)
 
                   let get_hd () = 
                     with_state.with_state (fun ~state ~set_state ->
@@ -277,13 +271,100 @@ module Make(S:S) = struct
                     with_state.with_state (fun ~state ~set_state ->
                         return (state.hd,state.tl))
 
+
+                  (**********************************
+                   * Functions that use the blk dev *
+                   **********************************)
+
+                  (*
+                  let _clear_nxt_blk blk_id = 
+                    A.x_to_blk ([],None) |> fun blk ->
+                    write ~blk_id ~blk
+                     *)
+
+                  (* not used 
+                  (* invariant: if tl not written to disk yet, then tl_dirty is true *)
+                  (* NOTE up to this point, presumably as a very minor
+                     optimization we haven't written the eol
+                     terminator *)
+                  let sync' ~state = 
+                    let { tl; buffer=buf; dirty; off; _ } = state in
+                    match dirty with
+                    | true -> (
+                        (* marshal None at off *)
+                        add_elt_list_terminator off buf |> fun buf ->
+                        write ~blk_id:tl ~blk:(A.buf_to_blk buf) >>= fun () ->
+                        return {state with dirty=false })
+                    | false -> return state
+                  *)
+
+                  let add = 
+                    fun ~nxt ~elt ->
+                    with_state.with_state (fun ~state ~set_state ->
+                        let { off; _ } = state in
+                        match A.can_fit ~off ~n:(2*A.max_elt_sz) with
+                        | true -> (
+                            add_elt ~state ~elt |> fun state ->
+                            set_state state >>= fun () ->
+                            return (Some nxt))
+                        | false -> (
+                            (* write the new blk first *)
+                            A.x_to_buf ([elt],None) |> fun (buf,off) ->
+                            write_sync ~blk_id:nxt ~blk:(A.buf_to_blk buf) >>= fun () ->
+                            (* write old blk with nxt *)
+                            let blk_id = state.tl in
+                            let buf' = state.buffer |> set_nxt (Some nxt)
+                                       |> add_elt_list_terminator state.off
+                            in
+                            write_sync ~blk_id ~blk:(buf' |> A.buf_to_blk) >>= fun () ->
+                            move_to_nxt ~hd:state.hd ~nxt ~blk_len:(state.blk_len+1) ~buf ~off ~dirty:false 
+                            |> set_state >>= fun () ->
+                            return None))
+
+                  let sync_tl =
+                    fun () ->
+                    with_state.with_state (fun ~state ~set_state ->
+                        let { tl=blk_id; buffer=buf; off; dirty; _ } = state in
+                        buf |> add_elt_list_terminator off |> fun buf ->
+                        write_sync ~blk_id ~blk:(A.buf_to_blk buf) >>= fun () ->
+                        set_state {state with buffer=buf; dirty=false})
+
+                  let adv_hd () = 
+                    with_state.with_state (fun ~state ~set_state ->
+                        let { hd; _ } = state in
+                        read ~blk_id:hd >>= fun old_blk ->
+                        old_blk |> A.blk_to_x |> fun (elts,nxt) ->        
+                        match nxt with
+                        | None -> return (Error ())
+                        | Some new_hd -> 
+                          set_state { state with hd=new_hd;blk_len=state.blk_len-1 } >>= fun () ->
+                          return (Ok { old_hd=hd; old_elts=elts; new_hd }))
+
+                  let adv_tl nxt = 
+                    with_state.with_state (fun ~state ~set_state ->
+                        (* write the new blk first *)
+                        A.x_to_buf ([],None) |> fun (buf,off) ->
+                        write_sync ~blk_id:nxt ~blk:(A.buf_to_blk buf) >>= fun () ->
+                        (* write old blk with nxt *)
+                        let blk_id = state.tl in
+                        let buf' = state.buffer |> set_nxt (Some nxt)
+                                   |> add_elt_list_terminator state.off
+                        in
+                        write_sync ~blk_id ~blk:(buf' |> A.buf_to_blk) >>= fun () ->
+                        move_to_nxt ~hd:state.hd ~nxt ~blk_len:(state.blk_len+1) ~buf ~off ~dirty:false
+                        |> set_state >>= fun () ->
+                        return ())
+
+
+                  (* Read a blk, without assuming that it is a marshalled plist block *)
                   let read_blk blk_id = 
                     read ~blk_id >>= fun blk ->
                     try 
-                      let x = blk_to_x blk in
-                      return (Ok(blk_to_x blk))
+                      let x = A.blk_to_x blk in
+                      return (Ok(A.blk_to_x blk))
                     with _ -> return (Error ())
 
+                  (* Read the hd blk (assuming hd <> tl) from disk *)
                   let read_hd () =
                     get_hd () >>= fun hd -> 
                     get_tl () >>= fun tl ->  (* FIXME only needed for checking *)
@@ -294,10 +375,11 @@ module Make(S:S) = struct
                     | Ok x -> return x
                     | Error () -> failwith "read_hd: hd block was not marshalled correctly on disk; are you sure it was synced?"
 
+                  (* FIXME perhaps move this outside the plist operations, to init/with_state level *)
                   let append pl2 = 
                     with_state.with_state (fun ~state ~set_state -> 
                         let buf = state.buffer |> set_nxt (Some(pl2.hd)) in
-                        write ~blk_id:state.tl ~blk:(buf_to_blk buf) >>= fun () ->
+                        write_sync ~blk_id:state.tl ~blk:(A.buf_to_blk buf) >>= fun () ->
                         let { hd; tl; buffer; off; blk_len; dirty=_ } = state in
                         set_state { hd; tl=pl2.tl; buffer=pl2.buffer; off=pl2.off; 
                                     blk_len=(blk_len+pl2.blk_len); dirty=pl2.dirty })
@@ -313,22 +395,31 @@ module Make(S:S) = struct
             end
       end
 
-  let _ :
-plist_marshal_info:('a, blk_id, blk, buf)
-                   Tjr_plist__.Plist_intf.plist_marshal_info ->
-buf_ops:buf Tjr_fs_shared.buf_ops ->
-blk_ops:blk Tjr_fs_shared.blk_ops ->
-< plist_marshal_ops : ('a, blk_id, blk) Tjr_plist__.Plist_intf.plist_marshal_ops;
-  with_ : monad_ops:t Tjr_monad.monad_ops ->
-          blk_dev_ops:(blk_id, blk, t) Tjr_fs_shared.blk_dev_ops ->
-          < plist_extra_ops : ('a, buf, blk_id, t)
-                        Tjr_plist__.Plist_intf.plist_extra_ops;
-            with_state : with_state:((blk_id, buf)
-                                     Tjr_plist__.Plist_intf.plist, t)
-                                    Tjr_monad.with_state ->
-                         ('a, buf, blk_id, t)
-                         Tjr_plist__.Plist_intf.plist_ops > >
-= make
+let (_ :
+      plist_marshal_info:('a, blk_id, blk, buf) plist_marshal_info ->
+      buf_ops:buf buf_ops ->
+      blk_ops:blk blk_ops ->
+      < plist_marshal_ops : ('a, blk_id, blk) plist_marshal_ops
+      ; with_ :
+          monad_ops:t monad_ops ->
+          blk_dev_ops:(blk_id, blk, t) blk_dev_ops ->
+          sync:(unit -> (unit,t)m) ->
+          < init :
+              < from_endpts :
+                  blk_id Pl_root_info.pl_root_info ->
+                  ( < plist : (blk_id, buf) plist
+                    ; plist_ops : ('a, buf, blk_id, t) plist_ops
+                    ; plist_ref : (blk_id, buf) plist ref
+                    ; with_plist : ((blk_id, buf) plist, t) with_state >,
+                    t )
+                  m
+              ; from_hd : blk_id -> (('a list * blk_id option) list, t) m
+              ; mk_empty : blk_id -> ((blk_id, buf) plist, t) m >
+          ; with_state :
+              with_state:((blk_id, buf) plist, t) with_state ->
+              ('a, buf, blk_id, t) plist_ops > >) =
+  make
+
 
 
   let plist_factory ~monad_ops ~buf_ops ~blk_ops ~plist_marshal_info : (_,_,_,_,_) plist_factory = 
@@ -339,39 +430,29 @@ blk_ops:blk Tjr_fs_shared.blk_ops ->
       method blk_ops = blk_ops
       method plist_marshal_info = plist_marshal_info
       method plist_marshal_ops = x1#plist_marshal_ops
-      method with_blk_dev_ops = fun ~blk_dev_ops -> 
-        x1#with_ ~monad_ops ~blk_dev_ops |> fun x2 -> 
-        let ( >>= ) = monad_ops.bind in
-        let return = monad_ops.return in
-        let plist_extra_ops = x2#plist_extra_ops in
+      method with_blk_dev_ops = fun ~blk_dev_ops ~sync -> 
+        (* let blk_dev_ops = blk_dev_ops#get in *)
+        x1#with_ ~monad_ops ~blk_dev_ops ~sync |> fun x2 -> 
         object
-          method blk_dev_ops = blk_dev_ops
-          method plist_extra_ops = plist_extra_ops
+          method init = x2#init
           method with_state = fun with_state -> 
             x2#with_state ~with_state
-          method from_disk = fun (obj:<hd:blk_id;tl:blk_id;blk_len:int>) -> 
-            let (hd,tl,blk_len) = (obj#hd,obj#tl,obj#blk_len) in
-            plist_extra_ops.read_plist_tl ~hd ~tl ~blk_len >>= fun plist -> 
-            let r = ref plist in
-            let with_state = Tjr_monad.with_imperative_ref ~monad_ops r in            
-            let plist_ops = x2#with_state ~with_state in
-            return (object 
-              method plist_ops = plist_ops
-              method with_plist = with_state
-              method plist_ref = r
-            end)
+
         end
     end
+
     
-  let _ :
-monad_ops:t Tjr_monad.monad_ops ->
-buf_ops:buf Tjr_fs_shared.buf_ops ->
-blk_ops:blk Tjr_fs_shared.blk_ops ->
-plist_marshal_info:('a, blk_id, blk, buf)
-                   Tjr_plist__.Plist_intf.plist_marshal_info ->
-('a, blk_id, blk, buf, t) Tjr_plist__.Plist_intf.plist_factory
- = plist_factory
+  let (_ :
+      monad_ops:t Tjr_monad.monad_ops ->
+      buf_ops:buf Tjr_fs_shared.buf_ops ->
+      blk_ops:blk Tjr_fs_shared.blk_ops ->
+      plist_marshal_info:
+        ('a, blk_id, blk, buf) Tjr_plist__.Plist_intf.plist_marshal_info ->
+      ('a, blk_id, blk, buf, t) Tjr_plist__.Plist_intf.plist_factory) =
+    plist_factory
 end
+
+(*
 
 (**/**)
 let make (type buf blk_id blk t) ~plist_marshal_info = 
@@ -389,20 +470,27 @@ let make (type buf blk_id blk t) ~plist_marshal_info =
 let make ~(plist_marshal_info:('a, 'blk_id, 'blk, 'buf) plist_marshal_info) = 
   make ~plist_marshal_info
 
-let make : 
-plist_marshal_info:('a, 'blk_id, 'blk, 'buf)
-                   Tjr_plist__.Plist_intf.plist_marshal_info ->
-buf_ops:'buf Tjr_fs_shared.buf_ops ->
-blk_ops:'blk Tjr_fs_shared.blk_ops ->
-< plist_marshal_ops : ('a, 'blk_id, 'blk)
-                      Tjr_plist__.Plist_intf.plist_marshal_ops;
-  with_ : monad_ops:'b Tjr_monad.monad_ops ->
-          blk_dev_ops:('blk_id, 'blk, 'b) Tjr_fs_shared.blk_dev_ops ->
-          < plist_extra_ops : ('a, 'buf, 'blk_id, 'b)
-                              Tjr_plist__.Plist_intf.plist_extra_ops;
-            with_state : with_state:(('blk_id, 'buf)
-                                     Tjr_plist__.Plist_intf.plist, 'b)
-                                    Tjr_monad.with_state ->
-                         ('a, 'buf, 'blk_id, 'b)
-                         Tjr_plist__.Plist_intf.plist_ops > >
-  = make
+let make :
+    plist_marshal_info:_ ->
+    buf_ops:_ ->
+    blk_ops:_ ->
+    < plist_marshal_ops : ('a, 'blk_id, 'blk) plist_marshal_ops
+    ; with_ :
+        monad_ops:'t monad_ops ->
+        blk_dev_ops:('blk_id, 'blk, 't) blk_dev_ops ->
+        < init :
+            < from_endpts :
+                'blk_id Pl_root_info.pl_root_info ->
+                ( < plist : ('blk_id, 'buf) plist
+                  ; plist_ops : ('a, 'buf, 'blk_id, 't) plist_ops
+                  ; plist_ref : ('blk_id, 'buf) plist ref
+                  ; with_plist : (('blk_id, 'buf) plist, 't) with_state >,
+                  't )
+                m
+            ; from_hd : 'blk_id -> (('a list * 'blk_id option) list, 't) m
+            ; mk_empty : 'blk_id -> (('blk_id, 'buf) plist, 't) m >
+        ; with_state :
+            with_state:(('blk_id, 'buf) plist, 't) with_state ->
+            ('a, 'buf, 'blk_id, 't) plist_ops > > =
+  make
+*)

@@ -27,12 +27,13 @@ module Run_example() = struct
     let blk_dev_ops = Blk_dev_factory.make_5 fd in
 
     (* plist *)
-    let x1 = int_factory#with_blk_dev_ops ~blk_dev_ops in
-    let plist_extra_ops = x1#plist_extra_ops in
+    let sync = fun () -> failwith "FIXME" in
+    let x1 = int_factory#with_blk_dev_ops ~blk_dev_ops ~sync in
+    (* let plist_extra_ops = x1#plist_extra_ops in *)
 
     let b1 = B.of_int 1 in
     (* NOTE create_plist writes the empty list to blk *)
-    plist_extra_ops.create_plist b1 >>= fun pl ->
+    x1#init#mk_empty b1 >>= fun pl ->
     let pl_ref = ref pl in
     let with_state = with_ref pl_ref in
     let plist_ops = x1#with_state with_state in

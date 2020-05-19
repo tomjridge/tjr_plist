@@ -11,6 +11,7 @@ The main plist types come in three groups:
 
 *)
 
+(* $(PIPE2SH("""sed -n '/type[ ].*plist = /,/^}/p' >GEN.plist.ml_""")) *)
 type ('blk_id,'buf) plist = {
   hd      : 'blk_id;
   tl      : 'blk_id;
@@ -26,6 +27,18 @@ FIXME? including blk_len makes things a bit trickier since we have to
    store this in the root blk *)
 
 
+module Pl_root_info = struct
+  (** This type is the standard information we need to persist in order
+      to quickly restore the plist; we can also just follow the list from
+      the hd block of course, but this is O(n). *)
+  (* $(PIPE2SH("""sed -n '/type[ ].*pl_root_info/,/^[ ]*}/p' >GEN.pl_root_info.ml_""")) *)
+  type 'blk_id pl_root_info = {
+    hd  : 'blk_id;
+    tl  : 'blk_id;
+    blk_len : int
+  }
+end
+
 (** Internal operations, for debugging FIXME this is just ('a list *
    blk_id,'blk) mshlr *)
 type ('a,'blk_id,'blk) plist_marshal_ops = {  
@@ -33,6 +46,7 @@ type ('a,'blk_id,'blk) plist_marshal_ops = {
   marshal   : 'a list * 'blk_id option->'blk; 
 }
 
+(*
 type ('a,'buf,'blk_id,'t) plist_extra_ops = {  
   create_plist   : 'blk_id -> (('blk_id,'buf)plist,'t)m;
   (* read_plist_blk : 'blk_id -> ('a list * 'blk_id option,'t) m; *)
@@ -52,7 +66,7 @@ type ('a,'buf,'blk_id,'t) plist_extra_ops = {
   disk; hd is assumed to point to a valid hd; tl is read and the plist
   constructed
 *)
-
+*)
 
 type ('a,'blk_id) adv_hd = {
   old_hd   :'blk_id;
@@ -135,8 +149,16 @@ end
 include Plist_marshal_info
 
 
+(*
+(* $ (CONVENTION("A trailing s indicates that the basic operations are accompanied with a sync operation")) *)
 
-(* assume buf_ops and blk_ops are given, and plist_marshal_info, and blk_dev_ops *)
+type ('blk_id,'blk,'t)blk_dev_ops_s = <
+    get : ('blk_id,'blk,'t)blk_dev_ops;
+    sync: unit -> (unit,'t)m
+> 
+*)
+
+(* assume buf_ops and blk_ops are given, and plist_marshal_info *)
 (* $(PIPE2SH("""sed -n '/type[ ].*plist_factory/,/^>/p' >GEN.plist_factory.ml_""")) *)
 type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
   monad_ops          :'t monad_ops;
@@ -145,17 +167,23 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
   plist_marshal_info : ('a,'blk_id,'blk,'buf) plist_marshal_info;
   plist_marshal_ops  : ('a,'blk_id,'blk) plist_marshal_ops; 
   with_blk_dev_ops   :  
-    blk_dev_ops : ('blk_id,'blk,'t)blk_dev_ops 
+    blk_dev_ops : ('blk_id,'blk,'t)blk_dev_ops ->
+    sync : (unit -> (unit,'t)m)
     -> <
-      blk_dev_ops     : ('blk_id,'blk,'t)blk_dev_ops;
-      plist_extra_ops : ('a,'buf,'blk_id,'t) plist_extra_ops;
-      with_state      : (('blk_id,'buf)plist,'t)with_state -> 
+      init : <
+        mk_empty    : 'blk_id -> (('blk_id,'buf)plist,'t)m;
+        from_hd     : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m; 
+        from_endpts : 'blk_id Pl_root_info.pl_root_info -> (
+            <
+              plist      : ('blk_id,'buf)plist;
+              plist_ref  : ('blk_id,'buf)plist ref;              
+              with_plist : (('blk_id,'buf)plist,'t)with_state;
+              plist_ops  : ('a,'buf,'blk_id,'t)plist_ops;            
+            >,'t)m;
+      >;
+
+      with_state      : 
+        (('blk_id,'buf)plist,'t)with_state -> 
         ('a,'buf,'blk_id,'t)plist_ops;
-      from_disk       : <hd:'blk_id;tl:'blk_id;blk_len:int> -> 
-        (<
-          plist_ops:('a,'buf,'blk_id,'t)plist_ops;
-          with_plist: (('blk_id,'buf)plist,'t)with_state;
-          plist_ref: ('blk_id,'buf)plist ref;              
-        >,'t)m
     >
 >
