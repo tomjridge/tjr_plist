@@ -4,7 +4,7 @@ Various examples (fixed elt type). Also some code to exercise the
    functionality.
 
 *)
-open Sh_std_ctxt
+open Shared_ctxt
 open Freelist_intf
 
 let int_factory = Tjr_plist.pl_examples#int_plist_factory

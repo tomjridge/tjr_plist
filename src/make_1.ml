@@ -259,7 +259,11 @@ module Make(S:S) = struct
 
                   (* $(FIXME("The following should be a single function returning the hd,tl,blk_len")) *)
 
-                  let get_hd () = 
+                  let get_root_info () = 
+                    with_state.with_state (fun ~state ~set_state ->
+                        return Pl_root_info.{hd=state.hd;tl=state.tl;blk_len=state.blk_len})
+
+(*                  let get_hd () = 
                     with_state.with_state (fun ~state ~set_state ->
                         return (state.hd))
 
@@ -270,7 +274,7 @@ module Make(S:S) = struct
                   let get_hd_tl () = 
                     with_state.with_state (fun ~state ~set_state ->
                         return (state.hd,state.tl))
-
+*)
 
                   (**********************************
                    * Functions that use the blk dev *
@@ -366,11 +370,10 @@ module Make(S:S) = struct
 
                   (* Read the hd blk (assuming hd <> tl) from disk *)
                   let read_hd () =
-                    get_hd () >>= fun hd -> 
-                    get_tl () >>= fun tl ->  (* FIXME only needed for checking *)
+                    get_root_info () >>= fun rinf -> 
                     (* FIXME following should be a warning on log *)
-                    assert((match hd=tl with | true -> Printf.printf "Warning: read_hd, attempt to read hd when hd=tl; hd may not be synced" | false -> ()); true);
-                    read_blk hd >>= fun r ->
+                    assert((match rinf.hd=rinf.tl with | true -> Printf.printf "Warning: read_hd, attempt to read hd when hd=tl; hd may not be synced" | false -> ()); true);
+                    read_blk rinf.hd >>= fun r ->
                     match r with
                     | Ok x -> return x
                     | Error () -> failwith "read_hd: hd block was not marshalled correctly on disk; are you sure it was synced?"
@@ -391,7 +394,7 @@ module Make(S:S) = struct
                          *)
                 end)
                 in
-                { add;add_if_room;sync_tl;blk_len;adv_hd;adv_tl;get_hd;get_tl;get_hd_tl;read_hd;append }
+                { add;add_if_room;sync_tl;blk_len;adv_hd;adv_tl;get_root_info;read_hd;append }
             end
       end
 

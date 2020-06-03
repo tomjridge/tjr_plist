@@ -6,7 +6,7 @@
 
 Look at {!Plist_intf} for the main types. 
 
-Sync behaviour: There are at least 3 choices (in addition to
+Sync behaviour: There are at least 2 choices (in addition to
 respecting explicit syncs):
 
 - sync on every add

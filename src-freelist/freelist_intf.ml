@@ -65,6 +65,7 @@ type sync_type = [ `Tl_only | `Tl_and_root_block ]
 
 type fIXME
 
+(* $(PIPE2SH("""sed -n '/type[ ].*freelist_ops/,/^}$/p' >GEN.freelist_ops.ml_""")) *)
 type ('blk_id,'t) freelist_ops = {
   alloc      : unit -> ('blk_id,'t)m;
   alloc_many : int -> (fIXME,'t)m;

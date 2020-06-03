@@ -151,7 +151,7 @@ module Make(S:S)
           | false -> return false
           | true -> 
             (* FIXME we must ensure that the freelist state is protected eg with a mutex *)
-            set_state {s with disk_thread_active=true} >>= fun () -> return true) 
+            set_state {s with disk_thread_active=true} >>= fun () -> return true)
 
       (* maybe launch a disk thread *)
       >>= (function
@@ -273,10 +273,8 @@ module Make(S:S)
       | `Tl_only -> plist_ops.sync_tl ()
       | `Tl_and_root_block -> 
         plist_ops.sync_tl () >>= fun () ->
-        plist_ops.get_hd () >>= fun hd ->
-        plist_ops.get_tl () >>= fun tl ->
-        plist_ops.blk_len () >>= fun blk_len ->
-        root_block.write_root {hd;tl;blk_len;min_free=failwith "FIXME"} >>= fun () ->
+        plist_ops.get_root_info () >>= fun rinf -> 
+        root_block.write_root {hd=rinf.hd;tl=rinf.tl;blk_len=rinf.blk_len;min_free=failwith "FIXME"} >>= fun () ->
         root_block.sync ()
     in
 
