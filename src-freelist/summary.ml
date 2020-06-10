@@ -62,6 +62,14 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
 
 >
 
+type ('blk_id,'t) freelist_ops = {
+  alloc      : unit -> ('blk_id,'t)m;
+  alloc_many : int -> (fIXME,'t)m;
+  free       : 'blk_id -> (unit,'t)m;
+  free_many  : fIXME -> (unit,'t)m;
+  sync       : sync_type -> (unit,'t)m;
+}
+
 type ('elt,'blk_id,'t) version = 
   | For_blkids of ('elt,'blk_id) for_blk_ids
   | For_arbitrary_elts of 
