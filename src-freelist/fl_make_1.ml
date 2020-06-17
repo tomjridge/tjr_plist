@@ -273,7 +273,7 @@ module Make(S:S)
       | `Tl_only -> plist_ops.sync_tl ()
       | `Tl_and_root_block -> 
         plist_ops.sync_tl () >>= fun () ->
-        plist_ops.get_root_info () >>= fun rinf -> 
+        plist_ops.get_origin () >>= fun rinf -> 
         root_block.write_root {hd=rinf.hd;tl=rinf.tl;blk_len=rinf.blk_len;min_free=failwith "FIXME"} >>= fun () ->
         root_block.sync ()
     in

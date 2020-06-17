@@ -26,18 +26,39 @@ type ('blk_id,'buf) plist = {
 FIXME? including blk_len makes things a bit trickier since we have to
    store this in the root blk *)
 
-
-module Pl_root_info = struct
-  (** This type is the standard information we need to persist in order
-      to quickly restore the plist; we can also just follow the list from
-      the hd block of course, but this is O(n). *)
-  (* $(PIPE2SH("""sed -n '/type[ ].*pl_root_info/,/^[ ]*}/p' >GEN.pl_root_info.ml_""")) *)
-  type 'blk_id pl_root_info = {
+(** This type is the standard information we need to persist in order
+    to quickly restore the plist; we can also just follow the list from
+    the hd block of course, but this is O(n). *)
+module Pl_origin = struct 
+  (* \$(PIPE2SH("""sed -n '/type[ ].*pl_origin/,/^[ ]*}/p' >GEN.pl_origin.ml_""")) *)
+  type 'blk_id pl_origin = {
     hd  : 'blk_id;
     tl  : 'blk_id;
     blk_len : int
   }
+  type 'blk_id t = 'blk_id pl_origin
+
+  (* $(CONVENTION("""
+
+     The block on disk from which an object can be reconstructed is
+     called the origin block.  origin is held in mem, and synced to
+     disk explicitly; typically the origin fields will be part of some
+     larger in-mem structure, and sync will extract the fields and
+     write to some blk on disk
+
+     The typical route to construct a persistent object is then to
+     read the initial state from disk, implement with_state, implement
+     origin ops, then construct the operations using with_state and
+     origin_ops. In case the origin is part of some larger structure,
+     we implement the get/set/sync interface (rather than just sync)
+     """)) *)
+  type ('blk_id,'t) ops = {
+    get  : unit -> 'blk_id t;
+    set  : 'blk_id t -> (unit,'t)m;
+    sync : 'blk_id -> (unit,'t)m
+  }
 end
+open Pl_origin
 
 (** Internal operations, for debugging FIXME this is just ('a list *
    blk_id,'blk) mshlr *)
@@ -45,28 +66,6 @@ type ('a,'blk_id,'blk) plist_marshal_ops = {
   unmarshal : 'blk->'a list * 'blk_id option; 
   marshal   : 'a list * 'blk_id option->'blk; 
 }
-
-(*
-type ('a,'buf,'blk_id,'t) plist_extra_ops = {  
-  create_plist   : 'blk_id -> (('blk_id,'buf)plist,'t)m;
-  (* read_plist_blk : 'blk_id -> ('a list * 'blk_id option,'t) m; *)
-
-  read_plist     : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m;  
-  (* FIXME rename to pl_read_elts *)
-
-  read_plist_tl  : hd:'blk_id -> tl:'blk_id -> blk_len:int -> (('blk_id,'buf)plist,'t)m;
-}
-(** Operations which don't require the plist state; typically
-   initialization and debugging 
-
-- create_plist: in the current impl, this writes the empty list to
-  disk
-
-- read_plist_tl: to constructs a plist from one previously written to
-  disk; hd is assumed to point to a valid hd; tl is read and the plist
-  constructed
-*)
-*)
 
 type ('a,'blk_id) adv_hd = {
   old_hd   :'blk_id;
@@ -89,7 +88,7 @@ type ('a,'buf (* FIXME *),'blk_id,(* 'blk,*) 't) plist_ops = {
   adv_tl        : 'blk_id -> (unit,'t)m;
 
   blk_len       : unit -> (int,'t)m;
-  get_root_info : unit -> ('blk_id Pl_root_info.pl_root_info,'t)m;
+  get_origin    : unit -> ('blk_id pl_origin,'t)m;
 
   read_hd       : unit -> ('a list * 'blk_id option,'t)m;
   append        : ('blk_id,'buf) plist -> (unit,'t)m;
@@ -124,11 +123,6 @@ type ('a,'buf (* FIXME *),'blk_id,(* 'blk,*) 't) plist_ops = {
   space leak
 
 *)
-(*  get_hd    : unit -> ('blk_id,'t)m;
-  get_tl    : unit -> ('blk_id,'t)m;
-  get_hd_tl : unit -> ('blk_id * 'blk_id,'t)m; *)
-  (* read_tl   : unit -> (('a list * 'blk_id option)or_error,'t)m; *)
-  (* read_blk  : 'blk_id -> (('a list * 'blk_id option)or_error,'t)m *)
 
 
 
@@ -177,7 +171,8 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
       init : <
         mk_empty    : 'blk_id -> (('blk_id,'buf)plist,'t)m;
         from_hd     : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m; 
-        from_endpts : 'blk_id Pl_root_info.pl_root_info -> (
+
+        from_endpts : 'blk_id pl_origin -> (
             <
               plist      : ('blk_id,'buf)plist;
               plist_ref  : ('blk_id,'buf)plist ref;              
@@ -186,6 +181,7 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
             >,'t)m;
       >;
 
+      (* FIXME this should take origin ops *)
       with_state      : 
         (('blk_id,'buf)plist,'t)with_state -> 
         ('a,'buf,'blk_id,'t)plist_ops;

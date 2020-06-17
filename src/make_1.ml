@@ -194,7 +194,7 @@ module Make(S:S) = struct
                 method mk_empty = B.mk_empty
                 method from_hd = B.init_from_head
                 method from_endpts = fun pl_root_info -> 
-                  let Pl_root_info.{hd;tl;blk_len} = pl_root_info in
+                  let Pl_origin.{hd;tl;blk_len} = pl_root_info in
                   B.init_from_endpts ~hd ~tl ~blk_len >>= fun plist ->
                   let r = ref plist in
                   let with_state = Tjr_monad.with_imperative_ref ~monad_ops r in            
@@ -259,9 +259,9 @@ module Make(S:S) = struct
 
                   (* $(FIXME("The following should be a single function returning the hd,tl,blk_len")) *)
 
-                  let get_root_info () = 
+                  let get_origin () = 
                     with_state.with_state (fun ~state ~set_state ->
-                        return Pl_root_info.{hd=state.hd;tl=state.tl;blk_len=state.blk_len})
+                        return Pl_origin.{hd=state.hd;tl=state.tl;blk_len=state.blk_len})
 
 (*                  let get_hd () = 
                     with_state.with_state (fun ~state ~set_state ->
@@ -335,7 +335,7 @@ module Make(S:S) = struct
 
                   let adv_hd () = 
                     with_state.with_state (fun ~state ~set_state ->
-                        let { hd; _ } = state in
+                        let { hd; _ } = (state:(_,_)plist) in
                         read ~blk_id:hd >>= fun old_blk ->
                         old_blk |> A.blk_to_x |> fun (elts,nxt) ->        
                         match nxt with
@@ -370,7 +370,7 @@ module Make(S:S) = struct
 
                   (* Read the hd blk (assuming hd <> tl) from disk *)
                   let read_hd () =
-                    get_root_info () >>= fun rinf -> 
+                    get_origin () >>= fun rinf -> 
                     (* FIXME following should be a warning on log *)
                     assert((match rinf.hd=rinf.tl with | true -> Printf.printf "Warning: read_hd, attempt to read hd when hd=tl; hd may not be synced" | false -> ()); true);
                     read_blk rinf.hd >>= fun r ->
@@ -394,7 +394,7 @@ module Make(S:S) = struct
                          *)
                 end)
                 in
-                { add;add_if_room;sync_tl;blk_len;adv_hd;adv_tl;get_root_info;read_hd;append }
+                { add;add_if_room;sync_tl;blk_len;adv_hd;adv_tl;get_origin;read_hd;append }
             end
       end
 
@@ -409,7 +409,7 @@ let (_ :
           sync:(unit -> (unit,t)m) ->
           < init :
               < from_endpts :
-                  blk_id Pl_root_info.pl_root_info ->
+                  blk_id Pl_origin.t ->
                   ( < plist : (blk_id, buf) plist
                     ; plist_ops : ('a, buf, blk_id, t) plist_ops
                     ; plist_ref : (blk_id, buf) plist ref
