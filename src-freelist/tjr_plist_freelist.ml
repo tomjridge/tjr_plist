@@ -1,7 +1,9 @@
-(** A freelist providing alloc and free, based on plist; safe to open this module. 
+(** A freelist providing alloc and free, based on plist;
+   concurrent-safe ((multiple writers are allowed, but only a single
+   thread interacts with disk); safe to open this module.
 
-{%html:
-<img src="https://docs.google.com/drawings/d/e/2PACX-1vT1LGM8Sm7USD8LF_CGLUVZ270PK4vk5LcBrENxjcebpRUYq4jxPpgCTzNFsIS8TOgrcsVvcbZcNJ-M/pub?w=974&amp;h=871">
+{%html: <img
+   src="https://docs.google.com/drawings/d/e/2PACX-1vT1LGM8Sm7USD8LF_CGLUVZ270PK4vk5LcBrENxjcebpRUYq4jxPpgCTzNFsIS8TOgrcsVvcbZcNJ-M/pub?w=974&amp;h=871">
 
 %}
 

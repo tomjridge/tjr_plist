@@ -53,9 +53,11 @@ module Pl_origin = struct
      we implement the get/set/sync interface (rather than just sync)
      """)) *)
   type ('blk_id,'t) ops = {
-    get  : unit -> 'blk_id t;
-    set  : 'blk_id t -> (unit,'t)m;
-    sync : 'blk_id -> (unit,'t)m
+    (* get  : unit -> 'blk_id t; *)
+    (* set  : 'blk_id t -> (unit,'t)m; *)
+    (* sync : unit -> (unit,'t)m; *)
+    set_and_sync: 'blk_id t -> (unit,'t)m; 
+    (** convenience combination of set and sync *)
   }
 end
 open Pl_origin
@@ -78,7 +80,7 @@ type 'a or_error = ('a,unit) result
 
 (** plist operations which require the plist state from the monad *)
 (* $(PIPE2SH("""sed -n '/type[ ].*plist_ops/,/^}/p' >GEN.plist_ops.ml_""")) *)
-type ('a,'buf (* FIXME *),'blk_id,(* 'blk,*) 't) plist_ops = {
+type ('a,'buf (* FIXME *),'blk_id, 't) plist_ops = {
   add           : nxt:'blk_id -> elt:'a -> ('blk_id option,'t) m;
   add_if_room   : 'a -> (bool,'t)m;
 
@@ -92,7 +94,6 @@ type ('a,'buf (* FIXME *),'blk_id,(* 'blk,*) 't) plist_ops = {
 
   read_hd       : unit -> ('a list * 'blk_id option,'t)m;
   append        : ('blk_id,'buf) plist -> (unit,'t)m;
-  (* FIXME append is really an operation on two lists *)
 }
 (** 
 
@@ -166,24 +167,33 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
   plist_marshal_ops  : ('a,'blk_id,'blk) plist_marshal_ops; 
   with_blk_dev_ops   :  
     blk_dev_ops : ('blk_id,'blk,'t)blk_dev_ops ->
-    sync : (unit -> (unit,'t)m)
+    sync        : (unit -> (unit,'t)m)
     -> <
       init : <
-        mk_empty    : 'blk_id -> (('blk_id,'buf)plist,'t)m;
-        from_hd     : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m; 
+        mk_empty     : 'blk_id -> (('blk_id,'buf)plist,'t)m;
 
-        from_endpts : 'blk_id pl_origin -> (
-            <
-              plist      : ('blk_id,'buf)plist;
-              plist_ref  : ('blk_id,'buf)plist ref;              
-              with_plist : (('blk_id,'buf)plist,'t)with_state;
-              plist_ops  : ('a,'buf,'blk_id,'t)plist_ops;            
-            >,'t)m;
+        read_from_hd : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m; 
+
+        from_endpts  : 'blk_id pl_origin -> (('blk_id,'buf)plist,'t)m;
       >;
 
-      (* FIXME this should take origin ops *)
-      with_state      : 
+      with_state : 
         (('blk_id,'buf)plist,'t)with_state -> 
         ('a,'buf,'blk_id,'t)plist_ops;
+
+      (* convenience; use with with_state *)
+      with_ref : 
+        ('blk_id,'buf)plist -> (
+          <
+            plist_ref  : ('blk_id,'buf)plist ref;              
+            with_plist : (('blk_id,'buf)plist,'t)with_state;
+          >);
+
+      add_origin : 
+        ('blk_id,'t) Pl_origin.ops -> 
+        ('a,'buf,'blk_id,'t)plist_ops -> 
+        ('a,'buf,'blk_id,'t)plist_ops
+    (** Modify plist_ops to sync the origin block when hd/tl change *)
+
     >
 >

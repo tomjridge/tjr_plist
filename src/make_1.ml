@@ -1,4 +1,4 @@
-(** Construct a persistent list (most generic version).
+(** Construct a persistent list (most generic version, not concurrent-safe).
 
 We store the list of elts from offset off0 (say); the nxt pointer
    takes up the first off0 bytes. Assumes max size of marshalled
@@ -162,8 +162,7 @@ module Make(S:S) = struct
                 return {pl with dirty=false}
 
 
-              (* FIXME rename to eg read_entire_plist *)
-              let init_from_head blk_id = 
+              let read_from_head blk_id = 
                 (blk_id,[]) |> iter_k (fun ~k (blk_id,acc) -> 
                     read ~blk_id >>= fun blk ->
                     A.blk_to_x blk |> fun (elts,nxt) ->
@@ -192,21 +191,15 @@ module Make(S:S) = struct
               (* method plist_extra_ops=extra_ops *)
               method init = object
                 method mk_empty = B.mk_empty
-                method from_hd = B.init_from_head
+                method read_from_hd = B.read_from_head
                 method from_endpts = fun pl_root_info -> 
                   let Pl_origin.{hd;tl;blk_len} = pl_root_info in
                   B.init_from_endpts ~hd ~tl ~blk_len >>= fun plist ->
-                  let r = ref plist in
-                  let with_state = Tjr_monad.with_imperative_ref ~monad_ops r in            
-                  let plist_ops = self#with_state ~with_state in
-                  return (object 
-                    method plist = plist
-                    method plist_ref = r
-                    method with_plist = with_state
-                    method plist_ops = plist_ops
-                  end)     
+                  return plist
+
               end
-              method with_state=fun ~(with_state:((blk_id,buf)plist,t) with_state) -> 
+              method with_state=fun 
+                ~(with_state:((blk_id,buf)plist,t) with_state) -> 
                 let open (struct
 
                   (* working with_state *)
@@ -257,24 +250,9 @@ module Make(S:S) = struct
                                   return true
                         | false -> return false)
 
-                  (* $(FIXME("The following should be a single function returning the hd,tl,blk_len")) *)
-
                   let get_origin () = 
                     with_state.with_state (fun ~state ~set_state ->
                         return Pl_origin.{hd=state.hd;tl=state.tl;blk_len=state.blk_len})
-
-(*                  let get_hd () = 
-                    with_state.with_state (fun ~state ~set_state ->
-                        return (state.hd))
-
-                  let get_tl () = 
-                    with_state.with_state (fun ~state ~set_state ->
-                        return (state.tl))
-
-                  let get_hd_tl () = 
-                    with_state.with_state (fun ~state ~set_state ->
-                        return (state.hd,state.tl))
-*)
 
                   (**********************************
                    * Functions that use the blk dev *
@@ -398,7 +376,7 @@ module Make(S:S) = struct
             end
       end
 
-let (_ :
+  let (_ :
       plist_marshal_info:('a, blk_id, blk, buf) plist_marshal_info ->
       buf_ops:buf buf_ops ->
       blk_ops:blk blk_ops ->
@@ -406,17 +384,10 @@ let (_ :
       ; with_ :
           monad_ops:t monad_ops ->
           blk_dev_ops:(blk_id, blk, t) blk_dev_ops ->
-          sync:(unit -> (unit,t)m) ->
+          sync:(unit -> (unit, t) m) ->
           < init :
-              < from_endpts :
-                  blk_id Pl_origin.t ->
-                  ( < plist : (blk_id, buf) plist
-                    ; plist_ops : ('a, buf, blk_id, t) plist_ops
-                    ; plist_ref : (blk_id, buf) plist ref
-                    ; with_plist : ((blk_id, buf) plist, t) with_state >,
-                    t )
-                  m
-              ; from_hd : blk_id -> (('a list * blk_id option) list, t) m
+              < from_endpts : blk_id Pl_origin.t -> ((blk_id, buf) plist, t) m
+              ; read_from_hd : blk_id -> (('a list * blk_id option) list, t) m
               ; mk_empty : blk_id -> ((blk_id, buf) plist, t) m >
           ; with_state :
               with_state:((blk_id, buf) plist, t) with_state ->
@@ -424,8 +395,11 @@ let (_ :
   make
 
 
-
-  let plist_factory ~monad_ops ~buf_ops ~blk_ops ~plist_marshal_info : (_,_,_,_,_) plist_factory = 
+  let plist_factory ~monad_ops ~buf_ops ~blk_ops ~plist_marshal_info 
+    : (_,_,_,_,_) plist_factory 
+    = 
+    let ( >>= ) = monad_ops.bind in
+    let return = monad_ops.return in
     make ~plist_marshal_info ~buf_ops ~blk_ops |> fun x1 -> 
     object 
       method monad_ops = monad_ops
@@ -440,7 +414,43 @@ let (_ :
           method init = x2#init
           method with_state = fun with_state -> 
             x2#with_state ~with_state
+              
+          method with_ref = fun (pl:(_,_)plist) -> 
+            let r = ref pl in
+            let with_plist = Tjr_monad.with_imperative_ref ~monad_ops r in
+            object
+              method plist_ref=r
+              method with_plist=with_plist
+            end
 
+          method add_origin=fun (origin_ops:(blk_id,_)Pl_origin.ops) plist_ops -> 
+            (* pick out those operations that can modify the origin,
+               and alter so that they correctly sync the origin block
+               *)
+            let { add; adv_hd; adv_tl; append; get_origin; _ } = plist_ops in
+            let sync_origin () = 
+              get_origin () >>= fun o -> 
+              origin_ops.set_and_sync o
+            in
+            let add ~nxt ~elt = 
+              add ~nxt ~elt >>= function
+              | None -> sync_origin() >>= fun () -> return None
+              | Some _ as x-> return x
+            in
+            let adv_hd () = 
+              adv_hd () >>= fun r -> 
+              sync_origin () >>= fun () -> 
+              return r
+            in
+            let adv_tl blk_id = 
+              adv_tl blk_id >>= fun () -> 
+              sync_origin () 
+            in
+            let append pl = 
+              append pl >>= fun () -> 
+              sync_origin () 
+            in
+            { plist_ops with add; adv_hd; append }              
         end
     end
 
@@ -497,3 +507,17 @@ let make :
             ('a, 'buf, 'blk_id, 't) plist_ops > > =
   make
 *)
+
+
+
+(*
+                  let r = ref plist in
+                  let with_state = Tjr_monad.with_imperative_ref ~monad_ops r in            
+                  let plist_ops = self#with_state ~with_state in
+                  return (object 
+                    method plist = plist
+                    method plist_ref = r
+                    method with_plist = with_state
+                    method plist_ops = plist_ops
+                  end)
+*)      
