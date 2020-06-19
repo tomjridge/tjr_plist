@@ -63,7 +63,7 @@ module Make(S:S) = struct
         (* The offset where we start writing elements *)
         let off0 = max_blk_id_sz 
 
-        let _ = 
+        let _ : unit = 
           assert(blk_sz = blk_sz_4096);
           assert(can_fit ~off:off0 ~n:(2*max_elt_sz)); 
           ()
@@ -423,14 +423,16 @@ module Make(S:S) = struct
               method with_plist=with_plist
             end
 
-          method add_origin=fun (origin_ops:(blk_id,_)Pl_origin.ops) plist_ops -> 
+          method add_origin=fun 
+            (obj:<set_and_sync: 'blk_id Pl_origin.t ->(unit,'t)m>) plist_ops -> 
+            let set_and_sync = obj#set_and_sync in
             (* pick out those operations that can modify the origin,
                and alter so that they correctly sync the origin block
                *)
             let { add; adv_hd; adv_tl; append; get_origin; _ } = plist_ops in
             let sync_origin () = 
               get_origin () >>= fun o -> 
-              origin_ops.set_and_sync o
+              set_and_sync o
             in
             let add ~nxt ~elt = 
               add ~nxt ~elt >>= function

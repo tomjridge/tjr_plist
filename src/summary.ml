@@ -43,7 +43,7 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
           >);
 
       add_origin : 
-        ('blk_id,'t) Pl_origin.ops -> 
+        <set_and_sync: 'blk_id pl_origin -> (unit,'t)m> -> 
         ('a,'buf,'blk_id,'t)plist_ops -> 
         ('a,'buf,'blk_id,'t)plist_ops
     (** Modify plist_ops to sync the origin block when hd/tl change *)

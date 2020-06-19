@@ -21,16 +21,19 @@ and ('elt,'blk_id) for_blk_ids =
 (* write_freelist_roots : hd:'blk_id -> tl:'blk_id -> (unit,'t)m; *)
 
 
-(* $(PIPE2SH("""sed -n '/type[ ][^=]*fl_root_info/,/^}/p' >GEN.fl_root_info.ml_""")) *)
-type ('a,'blk_id) fl_root_info = {
-  hd: 'blk_id;
-  tl: 'blk_id;
-  blk_len: int;
-  min_free: 'a option
-}
+module Fl_origin = struct
+  (* \$(PIPE2SH("""sed -n '/type[ ][^=]*fl_origin/,/^}/p' >GEN.fl_origin.ml_""")) *)
+  type ('a,'blk_id) fl_origin = {
+    hd: 'blk_id;
+    tl: 'blk_id;
+    blk_len: int;
+    min_free: 'a option
+  }
+  type ('a,'blk_id) t = ('a,'blk_id) fl_origin
+end
 
-
-(* $(PIPE2SH("""sed -n '/type[ ].*fl_root_mshlr/,/^$/p' >GEN.fl_root_mshlr.ml_""")) *)
+(*
+(* \$(PIPE2SH("""sed -n '/type[ ].*fl_root_mshlr/,/^$/p' >GEN.fl_root_mshlr.ml_""")) *)
 type ('a,'blk_id) fl_root_mshlr = ('a,'blk_id) fl_root_info bp_mshlr
 (** This type can be used to marshal the freelist root block; NOTE
    this is effectively specialized to 'blk = 'buf = bigarray *)
@@ -38,18 +41,6 @@ type ('a,'blk_id) fl_root_mshlr = ('a,'blk_id) fl_root_info bp_mshlr
 (* assume blk_dev_ops and blk_id given so that sync clearly refers to
    the root block only (but implement with generically with explicit
    params) *)
-
-(* $(PIPE2SH("""sed -n '/type[ ][^=]*fl_root_ops/,/^}$/p' >GEN.fl_root_ops.ml_""")) *)
-type ('a,'blk_id,'t) fl_root_ops = {
-  read_root  : unit -> ( ('a,'blk_id)fl_root_info, 't)m;
-  write_root : ('a,'blk_id) fl_root_info -> (unit,'t)m;
-  sync       : unit -> (unit,'t)m;
-}
-(**
-- write_root: we can recover the freelist providing we know the hd, tl and blk_len of the underlying plist
-- sync: ensure the freelist roots are actually on disk; redundant if
-   we assume the blk_dev_ops write direct to disk with no cache; this
-   sync is invoked by freelist_ops.sync
 *)
 
 
@@ -89,6 +80,8 @@ type 'a min_free_ops = {
    and returns a list of free elements (of the same length as
    requested) and the new min_free *)
 
+(* $(PIPE2SH("""sed -n '/^In-memory[ ]state for the freelist /,/^}$/p' >GEN.freelist.ml_""")) *)
+(** In-memory state for the freelist *)
 type 'a freelist = {
   transient          : 'a list; 
   min_free           : ('a * 'a min_free_ops) option;
@@ -150,6 +143,23 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
 >
 
 
+(* FIXME origin_factory 
+
+(* $(PIPE2SH("""sed -n '/type[ ][^=]*fl_root_ops/,/^}$/p' >GEN.fl_root_ops.ml_""")) *)
+type ('a,'blk_id,'t) fl_root_ops = {
+  read_root  : unit -> ( ('a,'blk_id)fl_root_info, 't)m;
+  write_root : ('a,'blk_id) fl_root_info -> (unit,'t)m;
+  sync       : unit -> (unit,'t)m;
+}
+(**
+- write_root: we can recover the freelist providing we know the hd, tl and blk_len of the underlying plist
+- sync: ensure the freelist roots are actually on disk; redundant if
+   we assume the blk_dev_ops write direct to disk with no cache; this
+   sync is invoked by freelist_ops.sync
+*)
+*)
+
+
 (*  
   with_ : 
     blk_dev_ops:('blk_id,'buf,'t)blk_dev_ops -> 
@@ -166,3 +176,6 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
       plist_ref     : ('blk_id,'buf)plist ref;
     >;
 *)
+
+
+

@@ -26,17 +26,33 @@ type ('blk_id,'buf) plist = {
 FIXME? including blk_len makes things a bit trickier since we have to
    store this in the root blk *)
 
+
+
 (** This type is the standard information we need to persist in order
     to quickly restore the plist; we can also just follow the list from
     the hd block of course, but this is O(n). *)
 module Pl_origin = struct 
+  open Bin_prot.Std
   (* \$(PIPE2SH("""sed -n '/type[ ].*pl_origin/,/^[ ]*}/p' >GEN.pl_origin.ml_""")) *)
   type 'blk_id pl_origin = {
     hd  : 'blk_id;
     tl  : 'blk_id;
     blk_len : int
-  }
-  type 'blk_id t = 'blk_id pl_origin
+  }[@@deriving bin_io]
+
+
+  let mshlr (type r) ~(r_mshlr: r bp_mshlr) : r pl_origin bp_mshlr = 
+    let module A = (val r_mshlr) in
+    let module B = struct
+      type t = A.t pl_origin[@@deriving bin_io]
+      let max_sz = (2*A.max_sz)+9
+    end
+    in
+    (module B)
+  let _ = mshlr
+
+
+  type 'blk_id t = 'blk_id pl_origin[@@deriving bin_io]
 
   (* $(CONVENTION("""
 
@@ -53,14 +69,16 @@ module Pl_origin = struct
      we implement the get/set/sync interface (rather than just sync)
      """)) *)
   type ('blk_id,'t) ops = {
-    (* get  : unit -> 'blk_id t; *)
-    (* set  : 'blk_id t -> (unit,'t)m; *)
-    (* sync : unit -> (unit,'t)m; *)
+    read  : unit -> 'blk_id t; 
+    write : 'blk_id t -> (unit,'t)m; 
     set_and_sync: 'blk_id t -> (unit,'t)m; 
     (** convenience combination of set and sync *)
   }
 end
 open Pl_origin
+
+
+
 
 (** Internal operations, for debugging FIXME this is just ('a list *
    blk_id,'blk) mshlr *)
@@ -190,10 +208,20 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
           >);
 
       add_origin : 
-        ('blk_id,'t) Pl_origin.ops -> 
+        <set_and_sync: 'blk_id pl_origin -> (unit,'t)m> -> 
         ('a,'buf,'blk_id,'t)plist_ops -> 
         ('a,'buf,'blk_id,'t)plist_ops
     (** Modify plist_ops to sync the origin block when hd/tl change *)
 
     >
+>
+
+
+type ('blk_id,'blk,'t) origin_factory = <
+  monad_ops :'t monad_ops;
+  with_: 
+    blk_dev_ops: ('blk_id,'blk,'t)blk_dev_ops -> 
+    blk_id : 'blk_id -> 
+    sync_blk_id : (unit -> (unit,'t)m) ->
+    < set_and_sync: 'blk_id pl_origin -> (unit,'t)m >
 >

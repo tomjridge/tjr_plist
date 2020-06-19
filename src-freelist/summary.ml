@@ -3,16 +3,6 @@
 (**
 
 {[
-  val make: 
-    monad_ops     :(t monad_ops) ->     
-    event_ops     :t event_ops ->
-    async         :((unit -> (unit, t) m) -> (unit, t) m) ->
-    plist_ops     :(elt, buf, blk_id, t) plist_ops ->
-    with_freelist :(elt freelist, t) with_state ->
-    root_block    :(elt, blk_id, t) fl_root_ops ->
-    version       :(elt,blk_id,t)version -> 
-    (elt, t) freelist_ops
-
 type ('a,'blk_id) fl_root_info = {
   hd: 'blk_id;
   tl: 'blk_id;
@@ -29,6 +19,14 @@ type ('a,'blk_id,'t) fl_root_ops = {
   read_root  : unit -> ( ('a,'blk_id)fl_root_info, 't)m;
   write_root : ('a,'blk_id) fl_root_info -> (unit,'t)m;
   sync       : unit -> (unit,'t)m;
+}
+
+type 'a freelist = {
+  transient          : 'a list; 
+  min_free           : ('a * 'a min_free_ops) option;
+  
+  waiting            : ('a event list);
+  disk_thread_active : bool;
 }
 
 type ('a,'buf,'blk_id,'t) freelist_factory = <
