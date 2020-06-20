@@ -27,7 +27,7 @@ module type T = sig
     async         :((unit -> (unit, t) m) -> (unit, t) m) ->
     plist_ops     :(elt, buf, blk_id, t) plist_ops ->
     with_freelist :(elt freelist, t) with_state ->
-    root_block    :(elt, blk_id, t) fl_root_ops ->
+    origin_ops    :(elt, blk_id,t) Fl_origin.ops ->
     version       :(elt,blk_id,t)version -> 
     (elt, t) freelist_ops
 
@@ -39,7 +39,7 @@ end
 (* [@@@warning "-26-8"] (\* FIXME *\) *)
 
 module Make(S:S) 
-  :  (T with type blk_id=S.blk_id and type blk=S.blk and type buf=S.buf and type elt=S.elt and type t=S.t) 
+  :  (T with type blk_id=S.blk_id and type blk=S.blk and type buf=S.buf and type elt=S.elt and type t=S.t)
 = struct
 
   include S
@@ -58,7 +58,7 @@ module Make(S:S)
       ~(async:(unit -> (unit,t)m) -> (unit,t)m)
       ~(plist_ops:(elt,buf,blk_id,t)plist_ops)
       ~(with_freelist:(elt freelist,t)with_state)
-      ~(root_block:(elt,blk_id,t)fl_root_ops)
+      ~(origin_ops:(elt,blk_id,t)Fl_origin.ops)
       ~(version:version)
     = 
     (* let For_arbitrary_elts blk_alloc = version in *)
@@ -269,13 +269,14 @@ module Make(S:S)
 
     let free_many pl = failwith "FIXME" in
 
-    let sync = function
-      | `Tl_only -> plist_ops.sync_tl ()
-      | `Tl_and_root_block -> 
-        plist_ops.sync_tl () >>= fun () ->
-        plist_ops.get_origin () >>= fun rinf -> 
-        root_block.write_root {hd=rinf.hd;tl=rinf.tl;blk_len=rinf.blk_len;min_free=failwith "FIXME"} >>= fun () ->
-        root_block.sync ()
+    let sync () = 
+      plist_ops.sync_tl () >>= fun () ->
+      plist_ops.get_origin () >>= fun rinf -> 
+      origin_ops.write {
+        hd=rinf.hd; tl=rinf.tl; blk_len=rinf.blk_len;
+        min_free=failwith "FIXME"
+      } >>= fun () ->
+      origin_ops.sync ()
     in
 
     { alloc; alloc_many; free; free_many; sync }
@@ -293,74 +294,15 @@ let make (type blk_id blk buf elt t) x : (elt,t)freelist_ops =
   end
   in
   let open (Make(S)) in
-  make ~monad_ops:(x#monad_ops)
+  make 
+    ~monad_ops:(x#monad_ops)
     ~event_ops:(x#event_ops)
     ~async:(x#async)
     ~plist_ops:(x#plist_ops)
     ~with_freelist:(x#with_freelist)
-    ~root_block:(x#root_block)
+    ~origin_ops:(x#origin_ops)
     ~version:(x#version)
 
 
 let _ = make
 
-(*
-  
-  let _ :
-monad_ops:t Tjr_monad.monad_ops ->
-event_ops:t Tjr_monad.event_ops ->
-async:((unit -> (unit, t) Tjr_monad.m) -> (unit, t) Tjr_monad.m) ->
-plist:(elt, buf, blk_id, t) Tjr_plist.Plist_intf.plist_ops ->
-with_freelist:(elt Tjr_plist_freelist__.Freelist_intf.freelist, t)
-              Tjr_monad.with_state ->
-root_block:(elt, blk_id, t) Tjr_plist_freelist__.Freelist_intf.fl_root_ops ->
-version:version -> (elt, t) Tjr_plist_freelist__.Freelist_intf.freelist_ops
-= make
-
-(**/**)
-let make (type blk_id blk buf elt t) x : (elt,t)freelist_ops = 
-  let module S = struct
-    type nonrec blk_id = blk_id
-    type nonrec blk = blk
-    type nonrec buf = buf
-    type nonrec elt = elt
-    type nonrec t = t
-  end
-  in
-  let open (Make(S)) in
-  make ~monad_ops:(x#monad_ops)
-    ~event_ops:(x#event_ops)
-    ~async:(x#async)
-    ~plist:(x#plist)
-    ~with_freelist:(x#with_freelist)
-    ~root_block:(x#root_block)
-    ~version:(x#version)
-(**/**)
-
-let make : 
-< async : (unit -> (unit, 't) m) -> (unit, 't) m;
-  event_ops : 't event_ops;
-  monad_ops : 't monad_ops;
-  plist : ('elt, 'buf, 'blk_id, 't) plist_ops;
-  root_block : ('elt,'blk_id, 't) fl_root_ops;
-  version : ('elt, 'blk_id, 't) version;
-  with_freelist : ('elt freelist, 't) with_state;
-> -> ('elt, 't) freelist_ops
-= make
-(** 
-
-{[
-let make : 
-< async : (unit -> (unit, 't) m) -> (unit, 't) m;
-  event_ops : 't event_ops;
-  monad_ops : 't monad_ops;
-  plist : ('elt, 'buf, 'blk_id, 't) plist_ops;
-  root_block : ('blk_id, 't) root_block_ops;
-  version : ('elt, 'blk_id, 't) version;
-  with_freelist : ('elt freelist, 't) with_state;
-> -> ('elt, 't) freelist_ops
-= make
-]}
-
-*)
-*)

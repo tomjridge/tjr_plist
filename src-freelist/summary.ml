@@ -3,61 +3,44 @@
 (**
 
 {[
-type ('a,'blk_id) fl_root_info = {
-  hd: 'blk_id;
-  tl: 'blk_id;
-  blk_len: int;
-  min_free: 'a option
-}
+  type ('a,'blk_id) fl_origin = {
+    hd: 'blk_id;
+    tl: 'blk_id;
+    blk_len: int;
+    min_free: 'a option
+  }
 
-type ('a,'blk_id) fl_root_mshlr = ('a,'blk_id) fl_root_info bp_mshlr
-(** This type can be used to marshal the freelist root block; NOTE
-   this is effectively specialized to 'blk = 'buf = bigarray *)
+  (* fl_origin ops *)
+  type ('a,'blk_id,'t) ops = {
+    read  : unit -> (('a,'blk_id)t,'t)m;
+    write : ('a,'blk_id)t -> (unit,'t)m;
+    sync  : unit -> (unit,'t)m;
+  }
 
-
-type ('a,'blk_id,'t) fl_root_ops = {
-  read_root  : unit -> ( ('a,'blk_id)fl_root_info, 't)m;
-  write_root : ('a,'blk_id) fl_root_info -> (unit,'t)m;
-  sync       : unit -> (unit,'t)m;
-}
-
-type 'a freelist = {
-  transient          : 'a list; 
-  min_free           : ('a * 'a min_free_ops) option;
-  
-  waiting            : ('a event list);
-  disk_thread_active : bool;
-}
 
 type ('a,'buf,'blk_id,'t) freelist_factory = <
   version       : ('a, 'blk_id) for_blk_ids; 
   (** NOTE specialized to 'a =iso= 'blk_id *)
 
-  read_root: 
+  origin_ops: 
     blk_dev_ops :('blk_id,'buf,'t)blk_dev_ops -> 
     blk_id      :'blk_id -> 
-    ( ('a,'blk_id)fl_root_info, 't)m;
-  
-  write_root:
-    blk_dev_ops :('blk_id,'buf,'t)blk_dev_ops -> 
-    blk_id      :'blk_id -> 
-    ('a,'blk_id)fl_root_info -> 
-    (unit,'t)m;
+    sync_blk    :(unit -> (unit,'t)m) ->
+    ('a,'blk_id,'t) Fl_origin.ops;
+    
 
   with_: 
     < blk_dev_ops   : ('blk_id,'buf,'t)blk_dev_ops;
-      plist_ops     :('a,'buf,'blk_id,'t) plist_ops;
-      with_freelist : ('a,'t)with_state;
-      fl_root_blk   : 'blk_id; 
+      sync_blk_dev  : (unit -> (unit,'t)m);
+      origin_blkid  : 'blk_id; 
     >
-    -> ('a,'t)freelist_ops;
+    -> <
+      with_state : 
+        ('a,'t)with_state -> ('a,'t)freelist_ops;
 
-  from_disk: 
-    < blk_dev_ops: ('blk_id,'buf,'t)blk_dev_ops;      
-      fl_root_blk: 'blk_id -> (('a,'t)freelist_ops,'t)m
+      with_ref   : unit -> ('a,'t)freelist_ops;
+      (** use an imperative ref to hold the state *)
     >
-    -> ('a,'t)freelist_ops;
-
 >
 
 type ('blk_id,'t) freelist_ops = {
@@ -65,7 +48,9 @@ type ('blk_id,'t) freelist_ops = {
   alloc_many : int -> (fIXME,'t)m;
   free       : 'blk_id -> (unit,'t)m;
   free_many  : fIXME -> (unit,'t)m;
-  sync       : sync_type -> (unit,'t)m;
+  sync       : unit -> (unit,'t)m;
+  (** NOTE the freelist already ensures it is crash safe; this sync is
+     really for tidy shutdown *)
 }
 
 type ('elt,'blk_id,'t) version = 

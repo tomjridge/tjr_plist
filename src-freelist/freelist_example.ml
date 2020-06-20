@@ -7,6 +7,8 @@ Various examples (fixed elt type). Also some code to exercise the
 open Shared_ctxt
 open Freelist_intf
 
+(** This is used by the freelist example; 
+    we also need an int_freelist_factory example FIXME *)
 let int_factory = Tjr_plist.pl_examples#int_plist_factory
 
 
@@ -39,9 +41,9 @@ module Run_example() = struct
     let plist_ops = x1#with_state with_state in
 
     (* freelist *)
-    let root_block = {
-      read_root=(fun () -> failwith "FIXME");
-      write_root=(fun x -> 
+    let origin_ops = Fl_origin.{
+      read=(fun () -> failwith "FIXME");
+      write=(fun x -> 
           (* FIXME should really write into blk 0 *)
           Printf.printf "call to write_freelist_roots\n%!";
           return ());
@@ -71,7 +73,7 @@ module Run_example() = struct
         method event_ops=event_ops
         method monad_ops=monad_ops
         method plist_ops=plist_ops 
-        method root_block=root_block
+        method origin_ops=origin_ops
         method version=version
         method with_freelist=with_freelist
       end)

@@ -1,13 +1,20 @@
 (** Main interfaces used by the freelist *)
 
 
-open Tjr_plist.Plist_intf
+(* open Tjr_plist.Plist_intf *)
 
 
-(** There are two versions of the freelist:
-- For_blkids: to implement the "usual" blk freelist, managing on-disk blocks; the elts are actually blk_ids
+(** 
 
-- For_arbitrary_elts: which allocates and frees arbitrary elements; some other freelist of the first type provides the alloc and free blk functionality
+There are two versions of the freelist:
+
+- For_blkids: to implement the "usual" blk freelist, managing on-disk
+  blocks; the elts are actually blk_ids
+
+- For_arbitrary_elts: which allocates and frees arbitrary elements;
+  some other freelist of the first type provides the alloc and free
+  blk functionality
+
 *)
 (* $(PIPE2SH("""sed -n '/type[ ].*version/,/^$/p' >GEN.version.ml_""")) *)
 type ('elt,'blk_id,'t) version = 
@@ -18,41 +25,29 @@ and ('elt,'blk_id) for_blk_ids =
   { e2b:'elt -> 'blk_id; b2e: 'blk_id -> 'elt } 
 
 
-(* write_freelist_roots : hd:'blk_id -> tl:'blk_id -> (unit,'t)m; *)
-
 
 module Fl_origin = struct
-  (* \$(PIPE2SH("""sed -n '/type[ ][^=]*fl_origin/,/^}/p' >GEN.fl_origin.ml_""")) *)
+  (* $(PIPE2SH("""sed -n '/type[ ][^=]*fl_origin/,/}/p' >GEN.fl_origin.ml_""")) *)
   type ('a,'blk_id) fl_origin = {
     hd: 'blk_id;
     tl: 'blk_id;
     blk_len: int;
     min_free: 'a option
   }
+
   type ('a,'blk_id) t = ('a,'blk_id) fl_origin
+
+  (* $(PIPE2SH("""sed -n '/fl_origin[ ]ops/,/^  }/p' >GEN.fl_origin_ops.ml_""")) *)
+  (* fl_origin ops *)
+  type ('a,'blk_id,'t) ops = {
+    read  : unit -> (('a,'blk_id)t,'t)m;
+    write : ('a,'blk_id)t -> (unit,'t)m;
+    sync  : unit -> (unit,'t)m;
+  }
+
+    (* write          : blk_id:'blk_id -> origin:('a,'blk_id)t -> (unit,'t)m; *)
 end
 
-(*
-(* \$(PIPE2SH("""sed -n '/type[ ].*fl_root_mshlr/,/^$/p' >GEN.fl_root_mshlr.ml_""")) *)
-type ('a,'blk_id) fl_root_mshlr = ('a,'blk_id) fl_root_info bp_mshlr
-(** This type can be used to marshal the freelist root block; NOTE
-   this is effectively specialized to 'blk = 'buf = bigarray *)
-
-(* assume blk_dev_ops and blk_id given so that sync clearly refers to
-   the root block only (but implement with generically with explicit
-   params) *)
-*)
-
-
-
-type sync_type = [ `Tl_only | `Tl_and_root_block ]
-(**
-
-`Tl: this just ensures that the tl block of the freelist is synced; it does not update the root block
-
-`Tl_and_root_block: sync tl and global root block
-
-*)
 
 type fIXME
 
@@ -62,9 +57,11 @@ type ('blk_id,'t) freelist_ops = {
   alloc_many : int -> (fIXME,'t)m;
   free       : 'blk_id -> (unit,'t)m;
   free_many  : fIXME -> (unit,'t)m;
-  sync       : sync_type -> (unit,'t)m;
+  sync       : unit -> (unit,'t)m;
+  (** NOTE the freelist already ensures it is crash safe; this sync is
+     really for tidy shutdown *)
 }
-(** alloc_many: int is the number of blk_ids (although this sort-of
+(** alloc_many: int is the number of blk_ids although this sort-of
    forces us to unmarshal the whole block; perhaps prefer also storing
    the number of elements in the block, precisely for this reason FIXME
 
@@ -79,6 +76,7 @@ type 'a min_free_ops = {
    the min_free element, and a count of the number of frees required,
    and returns a list of free elements (of the same length as
    requested) and the new min_free *)
+
 
 (* $(PIPE2SH("""sed -n '/^In-memory[ ]state for the freelist /,/^}$/p' >GEN.freelist.ml_""")) *)
 (** In-memory state for the freelist *)
@@ -100,82 +98,41 @@ object, in the plist, or geq min_free)
 
 - waiting: a list of threads waiting for a disk process to return
 
-NOTE: we assume that the state is accessed via with_state, ie, only one thread at a time
+NOTE: we assume that the state is accessed via with_state (ie with a
+mutex), so only one thread at a time modifies state
 
 *)
 
 
 
-(* assume monad ops,event_ops and async and version and fl_root_mshlr
-   given; NOTE 'a and 'blk_id are identified when working with the
-   standard freelist *)
+(* NOTE 'a is 'blk_id when working with the standard freelist *)
+
+(* FIXME implement this freelist_factory for standard types *)
 
 (* $(PIPE2SH("""sed -n '/type[ ].*freelist_factory/,/^>/p' >GEN.freelist_factory.ml_""")) *)
 type ('a,'buf,'blk_id,'t) freelist_factory = <
   version       : ('a, 'blk_id) for_blk_ids; 
   (** NOTE specialized to 'a =iso= 'blk_id *)
 
-  read_root: 
+  origin_ops: 
     blk_dev_ops :('blk_id,'buf,'t)blk_dev_ops -> 
     blk_id      :'blk_id -> 
-    ( ('a,'blk_id)fl_root_info, 't)m;
-  
-  write_root:
-    blk_dev_ops :('blk_id,'buf,'t)blk_dev_ops -> 
-    blk_id      :'blk_id -> 
-    ('a,'blk_id)fl_root_info -> 
-    (unit,'t)m;
+    sync_blk    :(unit -> (unit,'t)m) ->
+    ('a,'blk_id,'t) Fl_origin.ops;
+    
 
   with_: 
     < blk_dev_ops   : ('blk_id,'buf,'t)blk_dev_ops;
-      plist_ops     :('a,'buf,'blk_id,'t) plist_ops;
-      with_freelist : ('a,'t)with_state;
-      fl_root_blk   : 'blk_id; 
+      sync_blk_dev  : (unit -> (unit,'t)m);
+      origin_blkid  : 'blk_id; 
     >
-    -> ('a,'t)freelist_ops;
-
-  from_disk: 
-    < blk_dev_ops: ('blk_id,'buf,'t)blk_dev_ops;      
-      fl_root_blk: 'blk_id -> (('a,'t)freelist_ops,'t)m
-    >
-    -> ('a,'t)freelist_ops;
-
->
-
-
-(* FIXME origin_factory 
-
-(* $(PIPE2SH("""sed -n '/type[ ][^=]*fl_root_ops/,/^}$/p' >GEN.fl_root_ops.ml_""")) *)
-type ('a,'blk_id,'t) fl_root_ops = {
-  read_root  : unit -> ( ('a,'blk_id)fl_root_info, 't)m;
-  write_root : ('a,'blk_id) fl_root_info -> (unit,'t)m;
-  sync       : unit -> (unit,'t)m;
-}
-(**
-- write_root: we can recover the freelist providing we know the hd, tl and blk_len of the underlying plist
-- sync: ensure the freelist roots are actually on disk; redundant if
-   we assume the blk_dev_ops write direct to disk with no cache; this
-   sync is invoked by freelist_ops.sync
-*)
-*)
-
-
-(*  
-  with_ : 
-    blk_dev_ops:('blk_id,'buf,'t)blk_dev_ops -> 
-    fl_root_blk:'blk_id 
     -> <
-      freelist_ops : ('a,'t)freelist_ops; 
-      (** the freelist operations! *)
+      with_state : 
+        ('a,'t)with_state -> ('a,'t)freelist_ops;
 
-      fl_root_blk      : 'blk_id;
-      with_freelist : ('a freelist,'t) with_state;
-      freelist_ref  : 'a freelist ref;
-      plist_ops     : ('a,'buf,'blk_id,'t) plist_ops;
-      with_plist    : (('blk_id,'buf)plist,'t) with_state;
-      plist_ref     : ('blk_id,'buf)plist ref;
-    >;
-*)
-
+      with_ref   : unit -> ('a,'t)freelist_ops;
+      (** use an imperative ref to hold the state *)
+    >
+>
 
 
