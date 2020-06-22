@@ -21,21 +21,23 @@ type ('elt,'blk_id,'t) version =
   | For_blkids of ('elt,'blk_id) for_blk_ids
   | For_arbitrary_elts of 
       { alloc: unit -> ('blk_id,'t)m; free: 'blk_id -> (unit,'t)m }
+      (** For arbitrary elts, we need a way to allocate and free blocks *)
 and ('elt,'blk_id) for_blk_ids = 
   { e2b:'elt -> 'blk_id; b2e: 'blk_id -> 'elt } 
 
 
 
 module Fl_origin = struct
+  open Bin_prot.Std
   (* $(PIPE2SH("""sed -n '/type[ ][^=]*fl_origin/,/}/p' >GEN.fl_origin.ml_""")) *)
   type ('a,'blk_id) fl_origin = {
     hd: 'blk_id;
     tl: 'blk_id;
     blk_len: int;
     min_free: 'a option
-  }
+  }[@@deriving bin_io]
 
-  type ('a,'blk_id) t = ('a,'blk_id) fl_origin
+  type ('a,'blk_id) t = ('a,'blk_id) fl_origin[@@deriving bin_io]
 
   (* $(PIPE2SH("""sed -n '/fl_origin[ ]ops/,/^  }/p' >GEN.fl_origin_ops.ml_""")) *)
   (* fl_origin ops *)
@@ -78,7 +80,7 @@ type 'a min_free_ops = {
    requested) and the new min_free *)
 
 
-(* $(PIPE2SH("""sed -n '/^In-memory[ ]state for the freelist /,/^}$/p' >GEN.freelist.ml_""")) *)
+(* $(PIPE2SH("""sed -n '/In-memory[ ]state for the freelist /,/^}$/p' >GEN.freelist.ml_""")) *)
 (** In-memory state for the freelist *)
 type 'a freelist = {
   transient          : 'a list; 
@@ -104,7 +106,12 @@ mutex), so only one thread at a time modifies state
 *)
 
 
-
+type params = <
+  tr_upper:int;
+  tr_lower:int;
+  min_free_alloc_size:int
+>
+      
 (* NOTE 'a is 'blk_id when working with the standard freelist *)
 
 (* FIXME implement this freelist_factory for standard types *)
@@ -112,25 +119,28 @@ mutex), so only one thread at a time modifies state
 (* $(PIPE2SH("""sed -n '/type[ ].*freelist_factory/,/^>/p' >GEN.freelist_factory.ml_""")) *)
 type ('a,'buf,'blk_id,'t) freelist_factory = <
   version       : ('a, 'blk_id) for_blk_ids; 
-  (** NOTE specialized to 'a =iso= 'blk_id *)
+  (** NOTE this is for freelist only, not arbitrary elts *)
 
   origin_ops: 
-    blk_dev_ops :('blk_id,'buf,'t)blk_dev_ops -> 
-    blk_id      :'blk_id -> 
-    sync_blk    :(unit -> (unit,'t)m) ->
+    blk_dev_ops  : ('blk_id,'buf,'t)blk_dev_ops -> 
+    origin_blkid : 'blk_id -> 
+    sync_origin  : (unit -> (unit,'t)m) ->
     ('a,'blk_id,'t) Fl_origin.ops;
     
 
   with_: 
-    < blk_dev_ops   : ('blk_id,'buf,'t)blk_dev_ops;
-      sync_blk_dev  : (unit -> (unit,'t)m);
-      origin_blkid  : 'blk_id; 
-    >
-    -> <
+    blk_dev_ops  : ('blk_id,'buf,'t)blk_dev_ops ->
+    sync_blk_dev : (unit -> (unit,'t)m) -> 
+    origin_ops   : ('a,'blk_id,'t) Fl_origin.ops -> 
+    params       : params ->
+    <
       with_state : 
-        ('a,'t)with_state -> ('a,'t)freelist_ops;
+        ('a freelist,'t)with_state -> ('a,'t)freelist_ops;
 
-      with_ref   : unit -> ('a,'t)freelist_ops;
+      with_ref : 'a freelist -> 
+        < freelist_ops: ('a,'t)freelist_ops;
+          freelist_ref: 'a freelist ref;
+        >
       (** use an imperative ref to hold the state *)
     >
 >

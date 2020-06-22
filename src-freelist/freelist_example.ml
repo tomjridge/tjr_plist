@@ -76,6 +76,8 @@ module Run_example() = struct
         method origin_ops=origin_ops
         method version=version
         method with_freelist=with_freelist
+        method params=object
+          method tr_lower=2; method tr_upper=4; method min_free_alloc_size=1000 end
       end)
     in
 

@@ -48,7 +48,79 @@ let fl_examples =
 *)  
 
 
-(** {2 Example and summary} *)
+(** {2 Examples and summary} *)
+
+let fl_examples = 
+  let open Freelist_intf in
+  let open Shared_ctxt in
+  let module M = struct
+    (* open Fl_origin *)
+    type t = (r,r) Fl_origin.t[@@deriving bin_io]
+    let max_sz = 9*3 + 10 
+    (* assume hd,tl,blk_len and min_free option can be marshalled in this many bytes *)
+  end
+  in  
+  let origin_mshlr = 
+    bp_mshlrs#ba_mshlr 
+      ~mshlr:(module M) 
+      ~buf_sz:(Blk_sz.to_int blk_sz_4096) 
+  in  
+  let module Origin_mshlr = (val origin_mshlr) in
+  let fact : (_,_,_,_) freelist_factory = 
+    let version = { e2b=(fun x -> x); b2e=(fun x->x) } in
+    let origin_ops = 
+      fun ~(blk_dev_ops:(_,_,_)blk_dev_ops) ~origin_blkid ~sync_origin -> 
+        Fl_origin.{
+          read=(fun () ->  
+              blk_dev_ops.read ~blk_id:origin_blkid >>= fun blk ->
+              Origin_mshlr.unmarshal blk |> return);
+          write=(fun t -> 
+              Origin_mshlr.marshal t |> fun blk -> 
+              blk_dev_ops.write ~blk_id:origin_blkid ~blk);
+          sync=(fun () ->
+              Printf.printf "FIXME freelist origin sync called in %s\n%!" __FILE__;
+              return ())
+        }
+    in
+    let with_ = 
+      fun  ~(blk_dev_ops:(_,_,_)blk_dev_ops) ~sync_blk_dev ~origin_ops ~params -> 
+        let with_state = fun with_state -> 
+          Fl_make_1.make (object
+            method monad_ops=monad_ops
+            method async=async
+            method event_ops=event_ops
+            method origin_ops=origin_ops
+            method params=params
+            method plist_ops=failwith ""
+            method version=For_blkids version
+            method with_freelist=with_state
+          end)
+        in
+        let with_ref = fun fl ->
+          let freelist_ref = ref fl in
+          let with_state' = Tjr_monad.with_imperative_ref ~monad_ops freelist_ref in
+          let freelist_ops = with_state with_state' in
+          object
+            method freelist_ops=freelist_ops
+            method freelist_ref=freelist_ref
+          end
+        in
+        object
+          method with_state=with_state
+          method with_ref=with_ref
+        end
+    in
+    object
+      method version=version
+      method origin_ops=origin_ops
+      method with_=with_
+    end
+  in
+  object
+    method freelist_factory=fact
+  end
+  
+
 
 module Freelist_example = Freelist_example
 
