@@ -67,12 +67,31 @@ let pl_examples =
     end
     module M5 = Make_5.Make(S)
     let plist_marshal_info: int plist_marshal_info = {
-      elt_mshlr=Marshal_factory.make_1;
-      blk_id_mshlr=Marshal_factory.make_2;
+      elt_mshlr=mshlrs#for_int_option;
+      blk_id_mshlr=mshlrs#for_blk_id_option;
       blk_to_buf=blk_to_buf;
       buf_to_blk=buf_to_blk;
     }
     let int_plist_factory = M5.plist_factory ~monad_ops ~buf_ops ~blk_ops 
+        ~plist_marshal_info
+
+  end)
+  in
+  let open (struct
+    module S = struct 
+      type nonrec buf = buf
+      type nonrec blk_id = blk_id
+      type nonrec blk = blk
+      type nonrec t = t
+    end
+    module M5 = Make_5.Make(S)
+    let plist_marshal_info: Shared_ctxt.r plist_marshal_info = {
+      elt_mshlr=mshlrs#for_blk_id_option;
+      blk_id_mshlr=mshlrs#for_blk_id_option;
+      blk_to_buf=blk_to_buf;
+      buf_to_blk=buf_to_blk;
+    }
+    let r_plist_factory = M5.plist_factory ~monad_ops ~buf_ops ~blk_ops 
         ~plist_marshal_info
 
   end)
@@ -110,9 +129,8 @@ let pl_examples =
         obj
   in
   object 
-    method int_plist_factory : int plist_factory = int_plist_factory      
-(*    method origin_mshlr : 'r. r_mshlr: 'r bp_mshlr -> 'r Plist_intf.Pl_origin.t bp_mshlr = 
-      Plist_intf.Pl_origin.mshlr*)
+    method for_int : int plist_factory = int_plist_factory      
+    method for_blk_id : Shared_ctxt.r plist_factory = r_plist_factory
     method origin_factory:(_,_,_)Plist_intf.origin_factory = object
       method monad_ops=monad_ops
       method with_=

@@ -30,6 +30,10 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
   version       : ('a, 'blk_id) for_blk_ids; 
   (** NOTE this is for freelist only, not arbitrary elts *)
 
+  empty_freelist : min_free:('a * 'a min_free_ops) option -> 'a freelist;
+  (** [min_free] depends on the nature of 'a; for 'a = blk_id, we can
+     use the origin blk_id and incr to implement min_free *)
+
   origin_ops: 
     blk_dev_ops  : ('blk_id,'buf,'t)blk_dev_ops -> 
     origin_blkid : 'blk_id -> 
@@ -42,15 +46,25 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
     sync_blk_dev : (unit -> (unit,'t)m) -> 
     origin_ops   : ('a,'blk_id,'t) Fl_origin.ops -> 
     params       : params ->
-    <
-      with_state : 
-        ('a freelist,'t)with_state -> ('a,'t)freelist_ops;
+    < 
+      read_origin : unit -> (<
+          fl_origin: ('a,'blk_id)Fl_origin.t;
+          pl_origin: 'a Pl_origin.t
+        >,'t)m;
 
-      with_ref : 'a freelist -> 
-        < freelist_ops: ('a,'t)freelist_ops;
-          freelist_ref: 'a freelist ref;
+      plist_ops : 'a Pl_origin.t -> (('a,'buf,'blk_id,'t) plist_ops,'t)m;
+
+      with_plist_ops : ('a,'buf,'blk_id,'t) plist_ops -> 
+        <
+          with_state : 
+            ('a freelist,'t)with_state -> ('a,'t)freelist_ops;
+
+          with_ref : 'a freelist -> 
+            < freelist_ops: ('a,'t)freelist_ops;
+              freelist_ref: 'a freelist ref;
+            >
+        (** use an imperative ref to hold the state *)
         >
-      (** use an imperative ref to hold the state *)
     >
 >
 

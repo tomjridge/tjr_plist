@@ -1,5 +1,5 @@
 (env
-  (_ (flags (:standard -open Tjr_lib -open Tjr_monad -open Tjr_fs_shared -open Tjr_plist ))))
+  (_ (flags (:standard -open Tjr_lib -open Tjr_monad -open Tjr_fs_shared -open Tjr_plist -open Tjr_plist_freelist))))
 
 ;; (executable
 ;;  (public_name "plist_test")
@@ -11,7 +11,7 @@
 (executable
  (public_name "freelist_test")
  (package tjr_plist_freelist)
- (modules Freelist_test)
+ (modules Freelist_test Freelist_example_1 Freelist_example_2)
  (libraries tjr_plist_freelist)
 )
 
