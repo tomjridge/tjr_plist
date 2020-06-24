@@ -217,6 +217,7 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
 >
 
 
+(* $(PIPE2SH("""sed -n '/type[ ].*origin_factory/,/^>/p' >GEN.origin_factory.ml_""")) *)
 type ('blk_id,'blk,'t) origin_factory = <
   monad_ops :'t monad_ops;
   with_: 

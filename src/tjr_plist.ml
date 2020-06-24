@@ -50,7 +50,7 @@ module Plist_intf = Plist_intf
 
 module Make_1 = Make_1
 
-module Make_5 = Make_5
+(* module Make_5 = Make_5 *)
 
 (* $(CONVENTION("Place common examples under eg Tjr_plist.pl_examples
    object; this includes std_ctxt-specific type instances eg
@@ -58,43 +58,25 @@ module Make_5 = Make_5
 
 let pl_examples = 
   let open Pl_type_abbrevs in
-  let open (struct
-    module S = struct 
-      type nonrec buf = buf
-      type nonrec blk_id = blk_id
-      type nonrec blk = blk
-      type nonrec t = t
-    end
-    module M5 = Make_5.Make(S)
-    let plist_marshal_info: int plist_marshal_info = {
-      elt_mshlr=mshlrs#for_int_option;
-      blk_id_mshlr=mshlrs#for_blk_id_option;
-      blk_to_buf=blk_to_buf;
-      buf_to_blk=buf_to_blk;
-    }
-    let int_plist_factory = M5.plist_factory ~monad_ops ~buf_ops ~blk_ops 
-        ~plist_marshal_info
-
-  end)
+  let plist_marshal_info: int plist_marshal_info = {
+    elt_mshlr=mshlrs#for_int_option;
+    blk_id_mshlr=mshlrs#for_blk_id_option;
+    blk_to_buf=blk_to_buf;
+    buf_to_blk=buf_to_blk;
+  }
   in
-  let open (struct
-    module S = struct 
-      type nonrec buf = buf
-      type nonrec blk_id = blk_id
-      type nonrec blk = blk
-      type nonrec t = t
-    end
-    module M5 = Make_5.Make(S)
-    let plist_marshal_info: Shared_ctxt.r plist_marshal_info = {
-      elt_mshlr=mshlrs#for_blk_id_option;
-      blk_id_mshlr=mshlrs#for_blk_id_option;
-      blk_to_buf=blk_to_buf;
-      buf_to_blk=buf_to_blk;
-    }
-    let r_plist_factory = M5.plist_factory ~monad_ops ~buf_ops ~blk_ops 
-        ~plist_marshal_info
-
-  end)
+  let int_plist_factory = 
+    Make_1.make ~monad_ops ~buf_ops ~blk_ops ~plist_marshal_info
+  in
+  let plist_marshal_info: Shared_ctxt.r plist_marshal_info = {
+    elt_mshlr=mshlrs#for_blk_id_option;
+    blk_id_mshlr=mshlrs#for_blk_id_option;
+    blk_to_buf=blk_to_buf;
+    buf_to_blk=buf_to_blk;
+  }
+  in
+  let r_plist_factory = 
+    Make_1.make ~monad_ops ~buf_ops ~blk_ops ~plist_marshal_info
   in
   (* specialize to Shared_ctxt.r for time being *)
   let origin_ops = 
@@ -141,14 +123,6 @@ let pl_examples =
   end
 
 let _ = pl_examples
-
-(** {[
-< int_plist_factory : int Tjr_plist__.Pl_type_abbrevs.plist_factory;
-  origin_factory : (Tjr_fs_shared.Shared_ctxt.r,
-                    Tjr_fs_shared.Pvt_bin_prot_marshalling.ba_buf,
-                    Tjr_monad.With_lwt.lwt)
-                   Plist_intf.origin_factory >
-]} *)
 
 
 (** NOTE hidden doc for module [Pl_type_abbrevs] *)
