@@ -188,11 +188,13 @@ module Make_v1(S:S) = struct
               | `Finished -> return ()
               | `Unfinished -> 
                 (* (2.1) ---------- *)
-                Printf.printf "Disk thread did not allocate; attempting to use min_free\n%!";
+                Printf.printf "%s: Disk thread did not allocate; \
+                               attempting to use min_free\n%!" __FILE__;
                 with_freelist.with_state (fun ~state ~set_state -> 
                     match state.min_free with
-                    | None -> failwith {|
-FIXME at this point there are no free elements and no min_free|}
+                    | None -> failwith "FIXME at this point there are \
+                                        no free elements and no \
+                                        min_free"
                     | Some (elt,{min_free_alloc}) -> 
                       (* (2.2) ---------- *)
                       let num_to_alloc = min_free_alloc_size+List.length state.waiting in
@@ -203,7 +205,8 @@ FIXME at this point there are no free elements and no min_free|}
                          otherwise there is a danger that we crash and
                          then reallocate some elts that have already
                          been allocated *)
-                      Printf.printf "post disk: adding new transients from min_free\n%!"; 
+                      Printf.printf "%s: post disk: adding new \
+                                     transients from min_free\n%!" __FILE__; 
                       (* (2.3) ---------- *)
                       (* remember to wake up any waiting; also
                          remember to use state.transient first (which
@@ -215,7 +218,8 @@ FIXME at this point there are no free elements and no min_free|}
                           | e::elts,w::waiting -> 
                             ev_signal w e >>= fun () ->
                             k (elts,waiting)) >>= fun (elts,waiting) -> 
-                      Printf.printf "post disk_thread: setting state\n%!";
+                      Printf.printf "%s: post disk_thread: setting state\n%!" __FILE__;
+                      Printf.printf "%s: |transient| = %d\n%!" __FILE__ (List.length elts);
                       set_state { transient=elts; 
                                   (* FIXME transient=[]? no, just < tr_lower *)
                                   waiting;

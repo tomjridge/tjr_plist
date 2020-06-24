@@ -131,9 +131,9 @@ let fl_examples =
                   method with_freelist=with_state
                 end)
               in
-              let with_ref = fun fl ->
+              let with_locked_ref = fun fl ->
                 let freelist_ref = ref fl in
-                let with_state' = Tjr_monad.with_imperative_ref ~monad_ops freelist_ref in
+                let with_state' = With_lwt.with_locked_ref freelist_ref in
                 let freelist_ops = with_state with_state' in
                 object
                   method freelist_ops=freelist_ops
@@ -142,7 +142,7 @@ let fl_examples =
               in
               object
                 method with_state=with_state
-                method with_ref=with_ref
+                method with_locked_ref=with_locked_ref
               end)
           end)
     in

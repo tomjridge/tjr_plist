@@ -159,11 +159,11 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
           with_state : 
             ('a freelist,'t)with_state -> ('a,'t)freelist_ops;
 
-          with_ref : 'a freelist -> 
+          with_locked_ref : 'a freelist -> 
             < freelist_ops: ('a,'t)freelist_ops;
               freelist_ref: 'a freelist ref;
             >
-        (** use an imperative ref to hold the state *)
+        (** use an imperative ref to hold the state; lock for concurrency *)
         >
     >
 >

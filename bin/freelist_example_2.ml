@@ -17,6 +17,7 @@ let run_example ~params () =
     (* let file_ops = lwt_file_ops *)
       
     let run_a () = 
+      Printf.printf "%s: initializing file\n%!" __FILE__;
       blk_devs#with_ba_buf#from_filename ~fn ~create:true ~init:true >>= fun bd ->
 
       let module B = struct
@@ -47,38 +48,44 @@ let run_example ~params () =
         
         let run_b () = 
           (* we need to initialize b0 *)
+          Printf.printf "%s: initializing b0\n%!" __FILE__;
           let origin = Fl_origin.{hd=b1;tl=b1;blk_len=1;min_free=Some b2} in
           origin_ops.write origin >>= fun () -> 
 
           (* and b1 *)
+          Printf.printf "%s: initializing b1\n%!" __FILE__;
           pl_examples#for_blk_id#with_blk_dev_ops ~blk_dev_ops ~sync:sync_blk_dev |> fun x ->
           x#init#mk_empty b1 >>= fun plist ->
 
           (* and get the freelist ops *)
+          Printf.printf "%s: getting freelist ops\n%!" __FILE__;
           x#with_ref plist |> fun x2 ->
           x#with_state (x2#with_plist) |> fun plist_ops ->
           fact'#with_plist_ops plist_ops |> fun x3 -> 
-          x3#with_ref empty_freelist |> fun x4 -> 
+          x3#with_locked_ref empty_freelist |> fun x4 -> 
           x4#freelist_ops |> fun freelist_ops -> 
           
           (* then run some operations *)
+          Printf.printf "%s: running operations\n%!" __FILE__;
           let last = ref 0 in
           0 |> iter_k (fun ~k n ->
               match n >= 10_000 with
               | true -> return ()
               | false -> 
+                Printf.printf "%s: Calling freelist alloc\n%!" __FILE__;
                 freelist_ops.alloc () >>= fun i ->
                 let i = B.to_int i in
-                Printf.printf "Allocated blk_id: %d\n%!" i;
+                Printf.printf "%s: Allocated blk_id: %d\n%!" __FILE__ i;
                 last:=i;
                 k (n+1))
           >>= fun () ->
+          Printf.printf "%s: closing blk dev\n%!" __FILE__;
           bd#close () >>= fun () ->
-          Printf.printf "NOTE that the first allocated blk_id is 2, so \
+          Printf.printf "%s: NOTE that the first allocated blk_id is 2, so \
                          after 10k allocs, we expect to be at blkid \
-                         10_001\n%!";
+                         10_001\n%!" __FILE__;
           assert(!last = 10_001);
-          Printf.printf "Finished\n%!";
+          Printf.printf "%s: Finished\n%!" __FILE__;
           return ()
       end
       in
