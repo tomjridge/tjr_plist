@@ -3,6 +3,15 @@
 (**
 
 {[
+type ('blk_id,'blk,'t) origin_factory = <
+  monad_ops :'t monad_ops;
+  with_: 
+    blk_dev_ops: ('blk_id,'blk,'t)blk_dev_ops -> 
+    blk_id : 'blk_id -> 
+    sync_blk_id : (unit -> (unit,'t)m) ->
+    < set_and_sync: 'blk_id pl_origin -> (unit,'t)m >
+>
+
 type ('blk_id,'buf) plist = {
   hd      : 'blk_id;
   tl      : 'blk_id;
@@ -20,9 +29,10 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
   plist_marshal_ops  : ('a,'blk_id,'blk) plist_marshal_ops; 
   with_blk_dev_ops   :  
     blk_dev_ops : ('blk_id,'blk,'t)blk_dev_ops ->
-    sync        : (unit -> (unit,'t)m)
+    barrier     : (unit -> (unit,'t)m)
     -> <
       init : <
+        (* FIXME rename to "initialize_empty_blk" or similar *)
         mk_empty     : 'blk_id -> (('blk_id,'buf)plist,'t)m;
 
         read_from_hd : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m; 

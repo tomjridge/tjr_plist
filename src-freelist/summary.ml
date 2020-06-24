@@ -12,9 +12,10 @@
 
   (* fl_origin ops *)
   type ('a,'blk_id,'t) ops = {
-    read  : unit -> (('a,'blk_id)t,'t)m;
-    write : ('a,'blk_id)t -> (unit,'t)m;
-    sync  : unit -> (unit,'t)m;
+    read    : unit -> (('a,'blk_id)t,'t)m;
+    write   : ('a,'blk_id)t -> (unit,'t)m;
+    (* barrier : unit -> (unit,'t)m; *)
+    (* sync    : unit -> (unit,'t)m; *)
   }
 
 (** In-memory state for the freelist *)
@@ -34,24 +35,20 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
   (** [min_free] depends on the nature of 'a; for 'a = blk_id, we can
      use the origin blk_id and incr to implement min_free *)
 
-  origin_ops: 
-    blk_dev_ops  : ('blk_id,'buf,'t)blk_dev_ops -> 
-    origin_blkid : 'blk_id -> 
-    sync_origin  : (unit -> (unit,'t)m) ->
+  origin_ops:
+    blk_dev_ops : ('blk_id,'buf,'t)blk_dev_ops ->
+    barrier     : (unit -> (unit,'t)m) -> 
+    sync        : (unit -> (unit,'t)m) -> 
+    blk_id      : 'blk_id -> 
     ('a,'blk_id,'t) Fl_origin.ops;
-    
 
   with_: 
-    blk_dev_ops  : ('blk_id,'buf,'t)blk_dev_ops ->
-    sync_blk_dev : (unit -> (unit,'t)m) -> 
-    origin_ops   : ('a,'blk_id,'t) Fl_origin.ops -> 
-    params       : params ->
-    < 
-      read_origin : unit -> (<
-          fl_origin: ('a,'blk_id)Fl_origin.t;
-          pl_origin: 'a Pl_origin.t
-        >,'t)m;
-
+    blk_dev_ops : ('blk_id,'buf,'t)blk_dev_ops ->
+    barrier     : (unit -> (unit,'t)m) -> 
+    sync        : (unit -> (unit,'t)m) -> 
+    origin_ops  : ('a,'blk_id,'t) Fl_origin.ops ->
+    params      : params ->
+    <          
       plist_ops : 'a Pl_origin.t -> (('a,'buf,'blk_id,'t) plist_ops,'t)m;
 
       with_plist_ops : ('a,'buf,'blk_id,'t) plist_ops -> 
@@ -59,11 +56,11 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
           with_state : 
             ('a freelist,'t)with_state -> ('a,'t)freelist_ops;
 
-          with_ref : 'a freelist -> 
+          with_locked_ref : 'a freelist -> 
             < freelist_ops: ('a,'t)freelist_ops;
               freelist_ref: 'a freelist ref;
             >
-        (** use an imperative ref to hold the state *)
+        (** use an imperative ref to hold the state; lock for concurrency *)
         >
     >
 >

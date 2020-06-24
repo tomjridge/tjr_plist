@@ -2,7 +2,7 @@
    concurrent-safe ((multiple writers are allowed, but only a single
    thread interacts with disk); safe to open this module.
 
-{%html: <img
+{%html: <img width='100%'
    src="https://docs.google.com/drawings/d/e/2PACX-1vT1LGM8Sm7USD8LF_CGLUVZ270PK4vk5LcBrENxjcebpRUYq4jxPpgCTzNFsIS8TOgrcsVvcbZcNJ-M/pub?w=974&amp;h=871">
 
 %}
