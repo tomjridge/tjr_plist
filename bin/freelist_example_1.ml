@@ -28,12 +28,16 @@ let run_example ~params () =
 
         let blk_dev_ops = bd#blk_dev_ops
 
-        (* plist *)
+        (* plist *)                           
         let sync = fun () -> 
           Printf.printf "sync called: %s\n%!" __FILE__;
           return ()
 
-        let plist_fact = int_factory#with_blk_dev_ops ~blk_dev_ops ~sync
+        let barrier = fun () -> 
+          Printf.printf "barrier called: %s\n%!" __FILE__;
+          return ()
+
+        let plist_fact = int_factory#with_blk_dev_ops ~blk_dev_ops ~barrier
 
         let b1 = B.of_int 1
 
@@ -51,9 +55,9 @@ let run_example ~params () =
                     (* FIXME should really write into blk 0 *)
                     Printf.printf "call to write_freelist_roots\n%!";
                     return ());
-                sync=(fun () -> 
+                (*sync=(fun () -> 
                     Printf.printf "call to sync\n%!";
-                    return ())
+                    return ())*)
               }
 
             (* NOTE this actually uses ints rather than blk_ids, since we are
@@ -75,6 +79,8 @@ let run_example ~params () =
                 method async=async
                 method event_ops=event_ops
                 method monad_ops=monad_ops
+                method barrier=barrier
+                method sync = sync
                 method plist_ops=plist_ops 
                 method origin_ops=origin_ops
                 method version=version

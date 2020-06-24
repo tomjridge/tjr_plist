@@ -18,35 +18,6 @@ module Freelist_intf = Freelist_intf
 
 module Fl_make_1 = Fl_make_1
 
-(* module Fl_make_2 = Fl_make_2 *)
-
-(* module Fl_make_3 = Fl_make_3 *)
-
-(*
-let fl_examples =
-  let open Freelist_intf in
-  let open Sh_std_ctxt in
-  let open Tjr_monad.With_lwt in
-  let int_plist_factory = pl_examples#int_plist_factory in
-  object
-    method int_freelist_ops = 
-      fun (x1:< 
-           blk_dev_ops : (blk_id,blk,t)blk_dev_ops;  
-           pl_params   : < hd:blk_id; tl:blk_id; blk_len:int > ;
-           fl_root_blk : blk_id; >)
-        -> 
-          let blk_dev_ops = x1#blk_dev_ops in
-          int_plist_factory#with_blk_dev_ops ~blk_dev_ops |> fun x2 -> 
-          x2#from_disk x1#pl_params >>= fun x3 -> 
-          let plist_ops = x3#plist_ops in          
-          let fl_fact = 
-          return (object
-            method freelist_ops: (int,t) freelist_ops = failwith ""
-          end)
-
-  end
-*)  
-
 
 (** {2 Examples and summary} *)
 
@@ -67,48 +38,43 @@ let fl_examples =
       ~buf_sz:(Blk_sz.to_int blk_sz_4096) 
   in  
   let module Origin_mshlr = (val origin_mshlr) in
+
+  (* util; we read the fl_origin then need to instantiate the plist *)
+  let origin_to_pl Fl_origin.{hd;tl;blk_len;_} = Pl_origin.{hd;tl;blk_len} in
   
   (* for Shared_ctxt.r *)
   let fact : (r,_,_,_) freelist_factory = 
     let version = { e2b=(fun x -> x); b2e=(fun x->x) } in
     let origin_ops = 
-      fun ~(blk_dev_ops:(_,_,_)blk_dev_ops) ~origin_blkid ~sync_origin -> 
+      fun ~(blk_dev_ops:(_,_,_)blk_dev_ops) ~barrier ~sync ~blk_id -> 
         Fl_origin.{
           read=(fun () ->  
-              blk_dev_ops.read ~blk_id:origin_blkid >>= fun blk ->
+              blk_dev_ops.read ~blk_id >>= fun blk ->
               Origin_mshlr.unmarshal blk |> return);
           write=(fun t -> 
               Origin_mshlr.marshal t |> fun blk -> 
-              blk_dev_ops.write ~blk_id:origin_blkid ~blk);
-          sync=(fun () ->
-              Printf.printf "FIXME freelist origin sync called in %s\n%!" __FILE__;
-              return ())
+              blk_dev_ops.write ~blk_id ~blk);
+          (* barrier=barrier; *)
+          (* sync=sync *)
         }
     in
     let with_ = (
       fun  
         ~(blk_dev_ops:(_,_,_)blk_dev_ops) 
-        ~sync_blk_dev 
+        ~barrier
+        ~sync
         ~(origin_ops:(_,_,_)Fl_origin.ops) 
         ~params 
         ->
           object
-            (* to create plist_ops, we need the origin *)
-            method read_origin () =
-              origin_ops.read () >>= fun (Fl_origin.{hd;tl;blk_len;_} as o) -> 
-              return (object
-                method pl_origin=Pl_origin.{hd;tl;blk_len}
-                method fl_origin=o
-              end)            
-
             method plist_ops pl_origin = 
-              pl_origin |> fun Pl_origin.{hd;tl;blk_len;_} -> 
+              pl_origin |> fun Pl_origin.{hd;tl;blk_len} -> 
               let open (struct
                 let fact = pl_examples#for_blk_id
 
                 let _ : r Pl_type_abbrevs.plist_factory = fact
 
-                let x = fact#with_blk_dev_ops ~blk_dev_ops ~sync:sync_blk_dev
+                let x = fact#with_blk_dev_ops ~blk_dev_ops ~barrier:barrier
 
                 let plist_ops = 
                   x#init#from_endpts Plist_intf.Pl_origin.{hd; tl; blk_len} >>= fun pl -> 
@@ -124,6 +90,8 @@ let fl_examples =
                   method monad_ops=monad_ops
                   method async=async
                   method event_ops=event_ops
+                  method barrier=barrier
+                  method sync=sync
                   method origin_ops=origin_ops
                   method params=params
                   method plist_ops=plist_ops
@@ -147,13 +115,14 @@ let fl_examples =
           end)
     in
     object
-      method empty_freelist=empty_freelist
       method version=version
+      method empty_freelist=empty_freelist
       method origin_ops=origin_ops
       method with_=with_
     end
   in
   object
+    method origin_to_pl : 'a 'b. ('a,'b)Fl_origin.t -> 'b Pl_origin.t = origin_to_pl 
     method freelist_factory=fact
     method empty_freelist ~min_free:ropt = 
       let min_free = 

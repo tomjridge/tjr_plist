@@ -185,9 +185,10 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
   plist_marshal_ops  : ('a,'blk_id,'blk) plist_marshal_ops; 
   with_blk_dev_ops   :  
     blk_dev_ops : ('blk_id,'blk,'t)blk_dev_ops ->
-    sync        : (unit -> (unit,'t)m)
+    barrier     : (unit -> (unit,'t)m)
     -> <
       init : <
+        (* FIXME rename to "initialize_empty_blk" or similar *)
         mk_empty     : 'blk_id -> (('blk_id,'buf)plist,'t)m;
 
         read_from_hd : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m; 

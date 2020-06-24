@@ -25,6 +25,8 @@ module type S = sig
   val monad_ops     : (t monad_ops)
   val event_ops     : t event_ops
   val async         : ((unit -> (unit, t) m) -> (unit, t) m) 
+  val barrier       : (unit -> (unit,t)m)
+  val sync          : (unit -> (unit,t)m)
   val plist_ops     : (elt, buf, blk_id, t) plist_ops 
   val with_freelist : (elt freelist, t) with_state 
   val origin_ops    : (elt, blk_id,t) Fl_origin.ops 
@@ -323,7 +325,7 @@ module Make_v1(S:S) = struct
       hd=rinf.hd; tl=rinf.tl; blk_len=rinf.blk_len;
       min_free=failwith "FIXME"
     } >>= fun () ->
-    origin_ops.sync ()
+    sync ()
 
   let freelist_ops = 
     { alloc; alloc_many; free; free_many; sync }
@@ -346,6 +348,8 @@ let make (type blk_id blk buf elt t) x : (elt,t)freelist_ops =
     let monad_ops=x#monad_ops
     let event_ops=x#event_ops
     let async=x#async
+    let barrier=x#barrier
+    let sync=x#sync
     let plist_ops=x#plist_ops
     let with_freelist=x#with_freelist
     let origin_ops=x#origin_ops

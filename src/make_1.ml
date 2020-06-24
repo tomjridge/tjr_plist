@@ -135,7 +135,7 @@ module Make_v1(S:S) = struct
   module B(S2: sig 
       val monad_ops: t monad_ops
       val blk_dev_ops: (blk_id,blk,t)blk_dev_ops
-      val sync: unit -> (unit,t)m
+      val barrier: unit -> (unit,t)m
     end) = struct
     open S2
 
@@ -150,7 +150,7 @@ module Make_v1(S:S) = struct
 
       let write_sync ~blk_id ~blk = 
         write ~blk_id ~blk >>= fun () ->
-        sync ()
+        barrier ()
 
     end)
     
@@ -399,11 +399,11 @@ module Make_v1(S:S) = struct
       method plist_marshal_info = plist_marshal_info
       method plist_marshal_ops = plist_marshal_ops
       method with_blk_dev_ops =
-        fun ~blk_dev_ops ~sync -> 
+        fun ~blk_dev_ops ~barrier -> 
         let module S2 = struct 
           let monad_ops=monad_ops 
           let blk_dev_ops = blk_dev_ops 
-          let sync = sync
+          let barrier = barrier
         end
         in
         let module B = B(S2) in
