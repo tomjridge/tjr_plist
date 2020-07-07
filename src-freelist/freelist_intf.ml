@@ -38,29 +38,18 @@ module Fl_origin = struct
   }[@@deriving bin_io]
 
   type ('a,'blk_id) t = ('a,'blk_id) fl_origin[@@deriving bin_io]
-
-  (* $(PIPE2SH("""sed -n '/fl_origin[ ]ops/,/^  }/p' >GEN.fl_origin_ops.ml_""")) *)
-  (* fl_origin ops *)
-  type ('a,'blk_id,'t) ops = {
-    read    : unit -> (('a,'blk_id)t,'t)m;
-    write   : ('a,'blk_id)t -> (unit,'t)m;
-    (* barrier : unit -> (unit,'t)m; *)
-    (* sync    : unit -> (unit,'t)m; *)
-  }
-  (** NOTE barrier and sync only make sense if the non-origin part of
-     the freelist is on the same blk dev *)
-  (* write          : blk_id:'blk_id -> origin:('a,'blk_id)t -> (unit,'t)m; *)
 end
 
 
 type fIXME
 
 (* $(PIPE2SH("""sed -n '/type[ ].*freelist_ops/,/^}$/p' >GEN.freelist_ops.ml_""")) *)
-type ('blk_id,'t) freelist_ops = {
-  alloc      : unit -> ('blk_id,'t)m;
+type ('a,'blk_id,'t) freelist_ops = {
+  alloc      : unit -> ('a,'t)m;
   alloc_many : int -> (fIXME,'t)m;
-  free       : 'blk_id -> (unit,'t)m;
+  free       : 'a -> (unit,'t)m;
   free_many  : fIXME -> (unit,'t)m;
+  get_origin : unit -> (('a,'blk_id)Fl_origin.t,'t)m;
   sync       : unit -> (unit,'t)m;
   (** NOTE the freelist already ensures it is crash safe; this sync is
      really for tidy shutdown *)
@@ -73,6 +62,7 @@ free_many: free an entire list of blk_ids, by appending to this
    freelist *)
 
 
+(* $(PIPE2SH("""sed -n '/^type[ ].*min_free_ops/,/^}$/p' >GEN.min_free_ops.ml_""")) *)
 type 'a min_free_ops = {
   min_free_alloc: 'a -> int -> 'a list * 'a
 }
@@ -82,11 +72,11 @@ type 'a min_free_ops = {
    requested) and the new min_free *)
 
 
-(* $(PIPE2SH("""sed -n '/In-memory[ ]state for the freelist /,/^}$/p' >GEN.freelist.ml_""")) *)
+(* $(PIPE2SH("""sed -n '/In-memory[ ]state for the freelist /,/^}$/p' >GEN.freelist_im.ml_""")) *)
 (** In-memory state for the freelist *)
-type 'a freelist = {
+type 'a freelist_im = {
   transient          : 'a list; 
-  min_free           : ('a * 'a min_free_ops) option;
+  min_free           : 'a option; 
   
   waiting            : ('a event list);
   disk_thread_active : bool;
@@ -132,22 +122,27 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
   version       : ('a, 'blk_id) for_blk_ids; 
   (** NOTE this is for freelist only, not arbitrary elts *)
 
-  empty_freelist : min_free:('a * 'a min_free_ops) option -> 'a freelist;
+  empty_freelist : min_free:'a option -> 'a freelist_im;
   (** [min_free] depends on the nature of 'a; for 'a = blk_id, we can
      use the origin blk_id and incr to implement min_free *)
 
-  origin_ops:
+  read_origin:
     blk_dev_ops : ('blk_id,'buf,'t)blk_dev_ops ->
-    barrier     : (unit -> (unit,'t)m) -> 
-    sync        : (unit -> (unit,'t)m) -> 
     blk_id      : 'blk_id -> 
-    ('a,'blk_id,'t) Fl_origin.ops;
+    (('a,'blk_id) Fl_origin.t,'t)m;
+
+  write_origin:
+    blk_dev_ops : ('blk_id,'buf,'t)blk_dev_ops ->
+    blk_id      : 'blk_id -> 
+    origin      : ('a,'blk_id) Fl_origin.t -> 
+    (unit,'t)m;
+
+  fl_origin_to_pl : ('a,'blk_id) Fl_origin.t -> 'blk_id Pl_origin.t;
 
   with_: 
     blk_dev_ops : ('blk_id,'buf,'t)blk_dev_ops ->
     barrier     : (unit -> (unit,'t)m) -> 
     sync        : (unit -> (unit,'t)m) -> 
-    origin_ops  : ('a,'blk_id,'t) Fl_origin.ops ->
     params      : params ->
     <          
       plist_ops : 'a Pl_origin.t -> (('a,'buf,'blk_id,'t) plist_ops,'t)m;
@@ -155,32 +150,23 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
       with_plist_ops : ('a,'buf,'blk_id,'t) plist_ops -> 
         <
           with_state : 
-            ('a freelist,'t)with_state -> ('a,'t)freelist_ops;
+            ('a freelist_im,'t)with_state -> ('a,'blk_id,'t)freelist_ops;
 
-          with_locked_ref : 'a freelist -> 
-            < freelist_ops: ('a,'t)freelist_ops;
-              freelist_ref: 'a freelist ref;
+          with_locked_ref : 'a freelist_im -> 
+            < freelist_ops: ('a,'blk_id,'t)freelist_ops;
+              freelist_ref: 'a freelist_im ref;
             >
         (** use an imperative ref to hold the state; lock for concurrency *)
-        >
-    >
+        >;
+
+
+      (* Convenience *)
+
+      from_origin: 'blk_id -> 
+        (< freelist_ops: ('a,'blk_id,'t)freelist_ops;
+           freelist_ref: 'a freelist_im ref;
+         >,'t)m       
+    >    
 >
 
 
-(*
-
-
-(*
-  origin_ops: 
-    blk_dev_ops  : ('blk_id,'buf,'t)blk_dev_ops -> 
-    barrier      : (unit -> (unit,'t)m) ->
-    sync         : (unit -> (unit,'t)m) -> 
-    origin_blkid : 'blk_id -> 
-    ('a,'blk_id,'t) Fl_origin.ops;
-*)    
-
-      read_origin : unit -> (<
-          fl_origin: ('a,'blk_id)Fl_origin.t;
-          pl_origin: 'a Pl_origin.t
-        >,'t)m;
-*)

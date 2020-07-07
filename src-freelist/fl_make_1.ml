@@ -4,6 +4,8 @@ There are two versions (controlled by a "version" value in the input
    sig). The first is for arbitrary elements. The second is for
    blk_ids (ie, a standard freelist).
 
+This module implements the operations without consideration for the origin. At the end of this file, we wrap the operations with a function that updates the origin
+
 *)
 
 (* FIXME perhaps this would be better as a queue of blk_ids, and a
@@ -25,11 +27,10 @@ module type S = sig
   val monad_ops     : (t monad_ops)
   val event_ops     : t event_ops
   val async         : ((unit -> (unit, t) m) -> (unit, t) m) 
-  val barrier       : (unit -> (unit,t)m)
   val sync          : (unit -> (unit,t)m)
   val plist_ops     : (elt, buf, blk_id, t) plist_ops 
-  val with_freelist : (elt freelist, t) with_state 
-  val origin_ops    : (elt, blk_id,t) Fl_origin.ops 
+  val with_freelist : (elt freelist_im, t) with_state 
+  val min_free_alloc: elt -> int -> elt list * elt
   val version       : (elt,blk_id,t)version 
   val params        : Freelist_intf.params
 end
@@ -38,7 +39,7 @@ end
 module type T = sig
   module S : S
   open S      
-  val freelist_ops : (elt, t) freelist_ops
+  val freelist_ops : (elt,blk_id,t) freelist_ops
 end
 
 
@@ -197,7 +198,7 @@ module Make_v1(S:S) = struct
                     | None -> failwith "FIXME at this point there are \
                                         no free elements and no \
                                         min_free"
-                    | Some (elt,{min_free_alloc}) -> 
+                    | Some elt -> 
                       (* (2.2) ---------- *)
                       let num_to_alloc = min_free_alloc_size+List.length state.waiting in
                       Printf.printf "%s: num_to_alloc=%d\n%!" __FILE__ num_to_alloc;
@@ -229,7 +230,7 @@ module Make_v1(S:S) = struct
                                   (* FIXME it clearer why this has to
                                      be here - the disk_thread
                                      finished long ago *)
-                                  min_free=Some(elt,{min_free_alloc}) }
+                                  min_free=Some(elt) }
                   )
             end
           in
@@ -320,15 +321,25 @@ module Make_v1(S:S) = struct
 
   let sync () = 
     plist_ops.sync_tl () >>= fun () ->
+(*
     plist_ops.get_origin () >>= fun rinf -> 
-    origin_ops.write {
+    write_origin ~blk_dev_ops ~blk_id:origin ~origin:{
       hd=rinf.hd; tl=rinf.tl; blk_len=rinf.blk_len;
       min_free=failwith "FIXME"
     } >>= fun () ->
+*)
     sync ()
 
+  let get_origin () = 
+    plist_ops.get_origin () >>= fun pl ->
+    with_freelist.with_state (fun ~state ~set_state:_ ->
+        return state.min_free) >>= fun min_free -> 
+    let Pl_origin.{hd;tl;blk_len} = pl in
+    return Fl_origin.{hd;tl;blk_len;min_free}
+                                    
+
   let freelist_ops = 
-    { alloc; alloc_many; free; free_many; sync }
+    { alloc; alloc_many; free; free_many; sync; get_origin }
 
 end
 
@@ -338,7 +349,7 @@ module Make_v2(S:S) : (T with module S = S) = Make_v1(S)
 
 
 (** Make without functor *)
-let make (type blk_id blk buf elt t) x : (elt,t)freelist_ops = 
+let make (type blk_id blk buf elt t) x : (elt,blk_id,t)freelist_ops = 
   let module S = struct
     type nonrec blk_id = blk_id
     type nonrec blk = blk
@@ -348,13 +359,17 @@ let make (type blk_id blk buf elt t) x : (elt,t)freelist_ops =
     let monad_ops=x#monad_ops
     let event_ops=x#event_ops
     let async=x#async
-    let barrier=x#barrier
+    (* let blk_dev_ops=x#blk_dev_ops *)
+    (* let barrier=x#barrier *)
     let sync=x#sync
     let plist_ops=x#plist_ops
     let with_freelist=x#with_freelist
-    let origin_ops=x#origin_ops
+    (* let read_origin=x#read_origin *)
+    (* let write_origin=x#write_origin *)
+    (* let origin=x#origin *)
     let version=x#version
     let params=x#params
+    let min_free_alloc=x#min_free_alloc
   end
   in
   let module M = Make_v2(S) in
@@ -362,4 +377,16 @@ let make (type blk_id blk buf elt t) x : (elt,t)freelist_ops =
 
 
 let _ = make
+
+(* FIXME need to think a bit more about how the freelist is supposed
+   to take care of the syncs (and similarly for plist) *)
+let wrap_with_origin_updates ~monad_ops ~(freelist_ops:_ freelist_ops) ~write_origin =
+  let ( >>=) = monad_ops.bind in 
+  (* let return = monad_ops.return in *)
+  let { sync; _ } = freelist_ops in
+  let sync () = sync () >>= fun () ->
+    freelist_ops.get_origin () >>= fun fl -> 
+    write_origin ~fl_origin:fl
+  in
+  {freelist_ops with sync}
 
