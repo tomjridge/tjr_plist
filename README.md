@@ -4,22 +4,10 @@ The main functionality provided by this library is to maintain an
 on-disk singly-linked list, where each block stores a list of
 elements, and a pointer to the next blk (if any).
 
-
-~~~
-type ('a,'buf,'blk_id,'blk,'t) plist_ops = {
-  add  : nxt:'blk_id -> elt:'a -> ('blk_id option,'t) m;
-  sync : unit -> (unit,'t)m; 
-}
-~~~
-
-Note that `add` takes a `blk_id` in case a new block needs to be added
-at the end of the list. The blk id is returned if it isn't used.
-
 The library `tjr_plist_examples` contains examples.
 
 The executable `plist_test` tests basic functionality using OCaml
 marshalling and an in-memory blk device.
-
 
 ~~~
 make -k run 
@@ -36,4 +24,13 @@ sys	0m0.015s
 ~~~
 
 
-* OCamldoc: <https://tomjridge.github.io/ocamldocs>
+
+## tjr_plist_freelist
+
+This library uses the persistent list to implement an on-disk freelist. Some effort is taken to make this efficient eg a transient set of free elts is held in memory, and allocating from this set (which is the usual case) does not cause any disk activity.
+
+
+
+## OCamldoc
+
+A collection of ocamldocs is here: <https://tomjridge.github.io/ocamldocs>
