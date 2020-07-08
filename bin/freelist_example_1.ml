@@ -49,6 +49,7 @@ let run_example ~params () =
             let plist_ops = plist_fact#with_state with_state
 
             (* freelist *)
+                (*
             let origin_ops = Fl_origin.{
                 read=(fun () -> failwith "FIXME");
                 write=(fun _x -> 
@@ -59,7 +60,8 @@ let run_example ~params () =
                     Printf.printf "call to sync\n%!";
                     return ())*)
               }
-
+                   *)
+                
             (* NOTE this actually uses ints rather than blk_ids, since we are
                using int_plist_ops FIXME use blkid_plist_ops *)
             let version = For_blkids { 
@@ -67,8 +69,8 @@ let run_example ~params () =
                 b2e=(fun x -> B.to_int x) } 
 
             (* start off with some free elts in transient *)
-            let min_free_alloc elt n = (List_.from_upto elt (elt+n), elt+n) 
-            let min_free = Some (6,{ min_free_alloc })
+            let min_free_alloc elt n = (List_.from_upto elt (elt+n), elt+n)
+            let min_free = Some 6
             let fl_ref = ref { 
                 transient=[2;3;4;5]; min_free; 
                 waiting=[]; disk_thread_active=false } 
@@ -78,11 +80,10 @@ let run_example ~params () =
             let freelist_ops = Fl_make_1.make (object
                 method async=async
                 method event_ops=event_ops
+                method min_free_alloc=min_free_alloc
                 method monad_ops=monad_ops
-                method barrier=barrier
                 method sync = sync
                 method plist_ops=plist_ops 
-                method origin_ops=origin_ops
                 method version=version
                 method with_freelist=with_freelist
                 method params=object

@@ -24,7 +24,7 @@ let run_example ~params () =
         
         let blk_dev_ops = bd#blk_dev_ops
 
-        let fact = fl_examples#freelist_factory
+        let fact = fl_examples#for_r
                             
         (* let sync_blk_dev = bd#sync *)
 
@@ -38,7 +38,7 @@ let run_example ~params () =
         let b2 = B.of_int 2
 
         (* in-memory state *)
-        let empty_freelist = fl_examples#empty_freelist ~min_free:(Some b2)
+        let empty_freelist = fact#empty_freelist ~min_free:(Some b2)
 
         let barrier = fun () -> 
           Printf.printf "barrier called: %s\n%!" __FILE__;
@@ -48,17 +48,19 @@ let run_example ~params () =
           Printf.printf "sync called: %s\n%!" __FILE__;
           return ()
 
-        let origin_ops = fact#origin_ops 
-            ~blk_dev_ops ~blk_id:b0 ~barrier ~sync
+        (* let origin_ops = fact#origin_ops 
+         *     ~blk_dev_ops ~blk_id:b0 ~barrier ~sync *)
 
         let fact' = fact#with_
-            ~blk_dev_ops ~barrier ~sync ~origin_ops ~params:(params :> Freelist_intf.params)
+            ~blk_dev_ops ~barrier ~sync ~params:(params :> Freelist_intf.params)
+
+        let write_origin = fact#write_origin ~blk_dev_ops ~blk_id:b0
         
         let run_b () = 
           (* we need to initialize b0 *)
           Printf.printf "%s: initializing b0\n%!" __FILE__;
           let origin = Fl_origin.{hd=b1;tl=b1;blk_len=1;min_free=Some b2} in
-          origin_ops.write origin >>= fun () -> 
+          write_origin ~origin >>= fun () -> 
 
           (* and b1 *)
           Printf.printf "%s: initializing b1\n%!" __FILE__;

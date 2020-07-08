@@ -31,22 +31,27 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
   version       : ('a, 'blk_id) for_blk_ids; 
   (** NOTE this is for freelist only, not arbitrary elts *)
 
-  empty_freelist : min_free:('a * 'a min_free_ops) option -> 'a freelist;
+  empty_freelist : min_free:'a option -> 'a freelist_im;
   (** [min_free] depends on the nature of 'a; for 'a = blk_id, we can
      use the origin blk_id and incr to implement min_free *)
 
-  origin_ops:
+  read_origin:
     blk_dev_ops : ('blk_id,'buf,'t)blk_dev_ops ->
-    barrier     : (unit -> (unit,'t)m) -> 
-    sync        : (unit -> (unit,'t)m) -> 
     blk_id      : 'blk_id -> 
-    ('a,'blk_id,'t) Fl_origin.ops;
+    (('a,'blk_id) Fl_origin.t,'t)m;
+
+  write_origin:
+    blk_dev_ops : ('blk_id,'buf,'t)blk_dev_ops ->
+    blk_id      : 'blk_id -> 
+    origin      : ('a,'blk_id) Fl_origin.t -> 
+    (unit,'t)m;
+
+  fl_origin_to_pl : ('a,'blk_id) Fl_origin.t -> 'blk_id Pl_origin.t;
 
   with_: 
     blk_dev_ops : ('blk_id,'buf,'t)blk_dev_ops ->
     barrier     : (unit -> (unit,'t)m) -> 
     sync        : (unit -> (unit,'t)m) -> 
-    origin_ops  : ('a,'blk_id,'t) Fl_origin.ops ->
     params      : params ->
     <          
       plist_ops : 'a Pl_origin.t -> (('a,'buf,'blk_id,'t) plist_ops,'t)m;
@@ -54,25 +59,47 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
       with_plist_ops : ('a,'buf,'blk_id,'t) plist_ops -> 
         <
           with_state : 
-            ('a freelist,'t)with_state -> ('a,'t)freelist_ops;
+            ('a freelist_im,'t)with_state -> ('a,'blk_id,'t)freelist_ops;
 
-          with_locked_ref : 'a freelist -> 
-            < freelist_ops: ('a,'t)freelist_ops;
-              freelist_ref: 'a freelist ref;
+          with_locked_ref : 'a freelist_im -> 
+            < freelist_ops: ('a,'blk_id,'t)freelist_ops;
+              freelist_ref: 'a freelist_im ref;
             >
         (** use an imperative ref to hold the state; lock for concurrency *)
-        >
-    >
+        >;
+
+
+      (* Convenience *)
+
+      from_origin: 'blk_id -> 
+        (< freelist_ops: ('a,'blk_id,'t)freelist_ops;
+           freelist_ref: 'a freelist_im ref;
+         >,'t)m       
+    >    
 >
 
-type ('blk_id,'t) freelist_ops = {
-  alloc      : unit -> ('blk_id,'t)m;
+(** In-memory state for the freelist *)
+type 'a freelist_im = {
+  transient          : 'a list; 
+  min_free           : 'a option; 
+  
+  waiting            : ('a event list);
+  disk_thread_active : bool;
+}
+
+type ('a,'blk_id,'t) freelist_ops = {
+  alloc      : unit -> ('a,'t)m;
   alloc_many : int -> (fIXME,'t)m;
-  free       : 'blk_id -> (unit,'t)m;
+  free       : 'a -> (unit,'t)m;
   free_many  : fIXME -> (unit,'t)m;
+  get_origin : unit -> (('a,'blk_id)Fl_origin.t,'t)m;
   sync       : unit -> (unit,'t)m;
   (** NOTE the freelist already ensures it is crash safe; this sync is
      really for tidy shutdown *)
+}
+
+type 'a min_free_ops = {
+  min_free_alloc: 'a -> int -> 'a list * 'a
 }
 
 type ('elt,'blk_id,'t) version = 
