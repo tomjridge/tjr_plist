@@ -10,23 +10,6 @@
     min_free: 'a option
   }[@@deriving bin_io]
 
-  (* fl_origin ops *)
-  type ('a,'blk_id,'t) ops = {
-    read    : unit -> (('a,'blk_id)t,'t)m;
-    write   : ('a,'blk_id)t -> (unit,'t)m;
-    (* barrier : unit -> (unit,'t)m; *)
-    (* sync    : unit -> (unit,'t)m; *)
-  }
-
-(** In-memory state for the freelist *)
-type 'a freelist = {
-  transient          : 'a list; 
-  min_free           : ('a * 'a min_free_ops) option;
-  
-  waiting            : ('a event list);
-  disk_thread_active : bool;
-}
-
 type ('a,'buf,'blk_id,'t) freelist_factory = <
   version       : ('a, 'blk_id) for_blk_ids; 
   (** NOTE this is for freelist only, not arbitrary elts *)
@@ -69,12 +52,30 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
         >;
 
 
+      add_origin_autosync: 
+        blk_id:'blk_id -> 
+        freelist_ops:('a,'blk_id,'t)freelist_ops -> 
+        ('a,'blk_id,'t)freelist_ops;
+      (** This automatically syncs the origin block when origin data
+         changes; FIXME more efficient would be to sync only when hd
+         advances. *) 
+
+
       (* Convenience *)
 
       from_origin: 'blk_id -> 
         (< freelist_ops: ('a,'blk_id,'t)freelist_ops;
            freelist_ref: 'a freelist_im ref;
-         >,'t)m       
+         >,'t)m;
+          
+      from_origin_with_autosync: 'blk_id -> 
+        (< freelist_ops: ('a,'blk_id,'t)freelist_ops;
+           freelist_ref: 'a freelist_im ref;
+         >,'t)m;
+
+        
+
+
     >    
 >
 

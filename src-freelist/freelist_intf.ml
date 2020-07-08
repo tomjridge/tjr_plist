@@ -160,12 +160,26 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
         >;
 
 
+      add_origin_autosync: 
+        blk_id:'blk_id -> 
+        freelist_ops:('a,'blk_id,'t)freelist_ops -> 
+        ('a,'blk_id,'t)freelist_ops;
+      (** This automatically syncs the origin block when origin data
+         changes; FIXME more efficient would be to sync only when hd
+         advances. *) 
+
+
       (* Convenience *)
 
       from_origin: 'blk_id -> 
         (< freelist_ops: ('a,'blk_id,'t)freelist_ops;
            freelist_ref: 'a freelist_im ref;
-         >,'t)m       
+         >,'t)m;
+          
+      from_origin_with_autosync: 'blk_id -> 
+        (< freelist_ops: ('a,'blk_id,'t)freelist_ops;
+           freelist_ref: 'a freelist_im ref;
+         >,'t)m;
     >    
 >
 

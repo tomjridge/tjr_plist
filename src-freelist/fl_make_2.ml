@@ -103,8 +103,32 @@ module Fl_example_1 = struct
         method with_locked_ref=with_locked_ref
       end
 
+    (** This wraps the freelist operations in an inefficient piece of
+       code that checks whether the origin has changed, and if it has,
+       it syncs the origin *)
+    (* $(FIXME("""consider improving the freelist_ops wrapping""")) *)
+    let wrap (type a b) ~sync_origin ~(freelist_ops:_ freelist_ops) (f:a -> (b,t)m) = 
+      let { get_origin; _ } = freelist_ops in
+      fun a -> 
+        get_origin () >>= fun o1 -> 
+        f a >>= fun r -> 
+        get_origin () >>= fun o2 -> 
+        (match o1=o2 with
+         | true -> return ()
+         | false -> sync_origin o2) >>= fun () -> 
+        return r
+     
+    let _ = wrap
 
-    (* NOTE this doesn't currently sync the origin FIXME *)
+    let add_origin_autosync ~blk_id ~freelist_ops =
+      let sync_origin o = write_origin ~blk_dev_ops ~blk_id ~origin:o in
+      let wrap () = wrap ~sync_origin ~freelist_ops in
+      let _ = wrap in
+      let { alloc; alloc_many; free; free_many; get_origin; sync } = freelist_ops in
+      { alloc=wrap () alloc; alloc_many=wrap () alloc_many; 
+        free=wrap () free; free_many=wrap () free_many; get_origin; sync }
+
+    (* NOTE this doesn't sync the origin *)
     let from_origin blk_id = 
       read_origin ~blk_dev_ops ~blk_id >>= fun origin ->
       let fl = empty_freelist ~min_free:origin.min_free in
@@ -112,6 +136,15 @@ module Fl_example_1 = struct
       plist_ops pl_origin >>= fun plist_ops ->
       with_plist_ops plist_ops |> fun x -> 
       x#with_locked_ref fl |> return
+
+    let from_origin_with_autosync blk_id = 
+      from_origin blk_id >>= fun obj -> 
+      let freelist_ops = obj#freelist_ops in
+      let freelist_ops' = add_origin_autosync ~blk_id ~freelist_ops in
+      return (object
+        method freelist_ops=freelist_ops'
+        method freelist_ref=obj#freelist_ref
+      end)
       
 
   end (* With_ *)
@@ -128,7 +161,9 @@ module Fl_example_1 = struct
     object
       method plist_ops=X.plist_ops
       method with_plist_ops=X.with_plist_ops
+      method add_origin_autosync=X.add_origin_autosync
       method from_origin=X.from_origin
+      method from_origin_with_autosync=X.from_origin_with_autosync
     end
 
   let factory : _ freelist_factory = object
