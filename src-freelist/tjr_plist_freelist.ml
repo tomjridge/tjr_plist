@@ -14,6 +14,12 @@ include Summary
 
 module Freelist_intf = Freelist_intf
 
+module Fl_origin = Freelist_intf.Fl_origin
+
+type ('a,'buf,'blk_id,'t) freelist_factory = 
+  ('a,'buf,'blk_id,'t) Freelist_intf.freelist_factory
+
+
 (** {2 Make functors} *)
 
 module Fl_make_1 = Fl_make_1

@@ -48,6 +48,12 @@ include Summary
 
 module Plist_intf = Plist_intf
 
+module Pl_origin = Plist_intf.Pl_origin
+
+type ('a,'blk_id,'blk,'buf,'t) plist_factory
+  = ('a,'blk_id,'blk,'buf,'t) Plist_intf.plist_factory
+
+
 module Make_1 = Make_1
 
 (* module Make_5 = Make_5 *)

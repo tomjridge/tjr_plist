@@ -180,6 +180,11 @@ end
 
 (* FIXME also add an example for ints *)
 let fl_examples = object
+  method fl_params_1=object
+    method tr_upper=2000
+    method tr_lower=1000
+    method min_free_alloc_size=500
+  end  
   method for_r=Fl_example_1.factory
   method for_int=failwith "FIXME"
 end  
