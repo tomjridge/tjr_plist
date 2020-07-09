@@ -72,10 +72,6 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
         (< freelist_ops: ('a,'blk_id,'t)freelist_ops;
            freelist_ref: 'a freelist_im ref;
          >,'t)m;
-
-        
-
-
     >    
 >
 

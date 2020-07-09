@@ -42,7 +42,7 @@ let run_example ~params () =
         let b1 = B.of_int 1
 
         (* NOTE create_plist writes the empty list to blk *)
-        let run_b () = plist_fact#init#mk_empty b1 >>= fun pl ->          
+        let run_b () = plist_fact#init#create b1 >>= fun pl ->          
           let module C = struct
             let pl_ref = ref pl 
             let with_state = with_ref pl_ref

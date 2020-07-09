@@ -187,13 +187,23 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
     blk_dev_ops : ('blk_id,'blk,'t)blk_dev_ops ->
     barrier     : (unit -> (unit,'t)m)
     -> <
+      (* NOTE plist is very explicit about blk_ids (because it is used
+         as the basis for the freelist); so we don't assume a freelist
+         here, instead we require fresh blk_ids to be passed
+         explicitly *)
       init : <
-        (* FIXME rename to "initialize_empty_blk" or similar *)
-        mk_empty     : 'blk_id -> (('blk_id,'buf)plist,'t)m;
+        (* FIXME use create method instead *)
+        (* mk_empty_     : 'blk_id -> (('blk_id,'buf)plist,'t)m; *)
+
+        (* NOTE this does not create an origin blk *)
+        create       : 'blk_id -> (('blk_id,'buf)plist,'t)m;
 
         read_from_hd : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m; 
 
+        (* FIXME this should follow pointers from the tl if any *)
         from_endpts  : 'blk_id pl_origin -> (('blk_id,'buf)plist,'t)m;
+
+
       >;
 
       with_state : 
@@ -227,3 +237,15 @@ type ('blk_id,'blk,'t) origin_factory = <
     sync_blk_id : (unit -> (unit,'t)m) ->
     < set_and_sync: 'blk_id pl_origin -> (unit,'t)m >
 >
+
+
+(*
+        (* NOTE plist is very explicit about blk_ids (because it is
+           used as the basis for the freelist); so we don't assume a
+           freelist here, instead we require two fresh blk_ids to be
+           passed explicitly *)
+        create_with_origin: 
+          origin   :'blk_id ->
+          free_blk :'blk_id -> 
+          (('blk_id,'buf)plist,'t)m;
+*)

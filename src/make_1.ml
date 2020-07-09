@@ -192,9 +192,19 @@ module Make_v1(S:S) = struct
      * Initialization and constructing the operations via with-state *
      *****************************************************************)
 
+(*
+    let create_with_origin ~origin ~free_blk =
+      mk_empty free_blk >>= fun pl -> 
+      let {hd;tl;blk_len;_} = pl in
+      let o = Pl_origin.{hd;tl;blk_len} in
+      write_origin origin o >>= fun () ->
+      return pl
+*)
+
     let init = 
       object
-        method mk_empty = mk_empty
+        (* method mk_empty_ = mk_empty *)
+        method create = mk_empty
         method read_from_hd = read_from_head
         method from_endpts = fun pl_root_info -> 
           let Pl_origin.{hd;tl;blk_len} = pl_root_info in

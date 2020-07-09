@@ -65,7 +65,7 @@ let run_example ~params () =
           (* and b1 *)
           Printf.printf "%s: initializing b1\n%!" __FILE__;
           pl_examples#for_blk_id#with_blk_dev_ops ~blk_dev_ops ~barrier |> fun x ->
-          x#init#mk_empty b1 >>= fun plist ->
+          x#init#create b1 >>= fun plist ->
 
           (* and get the freelist ops *)
           Printf.printf "%s: getting freelist ops\n%!" __FILE__;
