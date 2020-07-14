@@ -61,6 +61,10 @@ type ('a,'blk_id,'t) freelist_ops = {
 free_many: free an entire list of blk_ids, by appending to this
    freelist *)
 
+let freelist_to_blk_allocator freelist_ops : _ blk_allocator_ops = 
+  let { alloc; free; _ } = freelist_ops in
+  { blk_alloc=alloc; blk_free=free }
+
 
 (* $(PIPE2SH("""sed -n '/^type[ ].*min_free_ops/,/^}$/p' >GEN.min_free_ops.ml_""")) *)
 type 'a min_free_ops = {
@@ -146,37 +150,39 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
     params      : params ->
     <          
       plist_ops : 'a Pl_origin.t -> (('a,'buf,'blk_id,'t) plist_ops,'t)m;
+      (** The freelist uses a persistent list. This is provided for convenience. *)
 
       with_plist_ops : ('a,'buf,'blk_id,'t) plist_ops -> 
         <
           with_state : 
             ('a freelist_im,'t)with_state -> ('a,'blk_id,'t)freelist_ops;
+          (** General version *)
 
           with_locked_ref : 'a freelist_im -> 
             < freelist_ops: ('a,'blk_id,'t)freelist_ops;
               freelist_ref: 'a freelist_im ref;
-            >
-        (** use an imperative ref to hold the state; lock for concurrency *)
+            >;
+          (** Use an imperative ref to hold the state; lock for concurrency *)
         >;
-
+      (** NOTE these operations do not involve an origin *)
 
       add_origin_autosync: 
-        blk_id:'blk_id -> 
-        freelist_ops:('a,'blk_id,'t)freelist_ops -> 
+        origin_blk_id:'blk_id -> 
+        ('a,'blk_id,'t)freelist_ops -> 
         ('a,'blk_id,'t)freelist_ops;
-      (** This automatically syncs the origin block when origin data
-         changes; FIXME more efficient would be to sync only when hd
-         advances. *) 
+      (** A wrapper for freelist_ops. The This automatically syncs the
+         origin block when origin data changes; FIXME more efficient
+         would be to sync only when hd advances. It is assumed that
+         initially the origin blk_id is synced *) 
 
+      initialize: origin:'blk_id -> free_blk: 'blk_id -> min_free:'a option -> (unit,'t)m;
+      (** Create a new freelist; the free_blk is used to hold an empty
+         plist *)
 
       (* Convenience *)
-
-      from_origin: 'blk_id -> 
-        (< freelist_ops: ('a,'blk_id,'t)freelist_ops;
-           freelist_ref: 'a freelist_im ref;
-         >,'t)m;
-          
-      from_origin_with_autosync: 'blk_id -> 
+      
+      (* was "from_origin" *)
+      restore: autosync:bool -> origin:'blk_id -> 
         (< freelist_ops: ('a,'blk_id,'t)freelist_ops;
            freelist_ref: 'a freelist_im ref;
          >,'t)m;

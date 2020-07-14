@@ -203,7 +203,6 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
         (* FIXME this should follow pointers from the tl if any *)
         from_endpts  : 'blk_id pl_origin -> (('blk_id,'buf)plist,'t)m;
 
-
       >;
 
       with_state : 

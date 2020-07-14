@@ -50,14 +50,16 @@ module Fl_example_1 = struct
     end) = struct
     open S
 
+    let pl_factory = pl_examples#for_blk_id
+
+    let _ : r Pl_type_abbrevs.plist_factory = pl_factory
+
+    let pl_with_ = pl_factory#with_blk_dev_ops ~blk_dev_ops ~barrier
+
     let plist_ops pl_origin = 
       pl_origin |> fun Pl_origin.{hd;tl;blk_len} -> 
       let open (struct
-        let fact = pl_examples#for_blk_id
-
-        let _ : r Pl_type_abbrevs.plist_factory = fact
-
-        let x = fact#with_blk_dev_ops ~blk_dev_ops ~barrier
+        let x = pl_with_
 
         let plist_ops = 
           x#init#from_endpts Plist_intf.Pl_origin.{hd; tl; blk_len} >>= fun pl -> 
@@ -120,7 +122,7 @@ module Fl_example_1 = struct
      
     let _ = wrap
 
-    let add_origin_autosync ~blk_id ~freelist_ops =
+    let add_origin_autosync ~origin_blk_id:blk_id freelist_ops =
       let sync_origin o = write_origin ~blk_dev_ops ~blk_id ~origin:o in
       let wrap () = wrap ~sync_origin ~freelist_ops in
       let _ = wrap in
@@ -128,8 +130,16 @@ module Fl_example_1 = struct
       { alloc=wrap () alloc; alloc_many=wrap () alloc_many; 
         free=wrap () free; free_many=wrap () free_many; get_origin; sync }
 
+
+    let initialize ~origin:blk_id ~free_blk ~min_free =
+      (* initialize free_blk as an empty plist *)
+      pl_with_#init#create free_blk >>= fun plist -> 
+      let Plist_intf.{hd;tl;blk_len;_} = plist in
+      let origin = Fl_origin.{hd;tl;blk_len;min_free } in
+      write_origin ~blk_dev_ops ~blk_id ~origin
+
     (* NOTE this doesn't sync the origin *)
-    let from_origin blk_id = 
+    let restore' blk_id = 
       read_origin ~blk_dev_ops ~blk_id >>= fun origin ->
       let fl = empty_freelist ~min_free:origin.min_free in
       let pl_origin = fl_origin_to_pl origin in
@@ -137,10 +147,15 @@ module Fl_example_1 = struct
       with_plist_ops plist_ops |> fun x -> 
       x#with_locked_ref fl |> return
 
-    let from_origin_with_autosync blk_id = 
-      from_origin blk_id >>= fun obj -> 
+    let restore ~autosync ~origin:blk_id = 
+      restore' blk_id >>= fun obj -> 
       let freelist_ops = obj#freelist_ops in
-      let freelist_ops' = add_origin_autosync ~blk_id ~freelist_ops in
+      let freelist_ops' = 
+        if autosync then 
+            add_origin_autosync ~origin_blk_id:blk_id freelist_ops 
+        else
+          freelist_ops
+      in
       return (object
         method freelist_ops=freelist_ops'
         method freelist_ref=obj#freelist_ref
@@ -162,8 +177,8 @@ module Fl_example_1 = struct
       method plist_ops=X.plist_ops
       method with_plist_ops=X.with_plist_ops
       method add_origin_autosync=X.add_origin_autosync
-      method from_origin=X.from_origin
-      method from_origin_with_autosync=X.from_origin_with_autosync
+      method initialize=X.initialize
+      method restore=X.restore
     end
 
   let factory : _ freelist_factory = object
