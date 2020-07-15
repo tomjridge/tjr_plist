@@ -8,9 +8,6 @@ This module implements the operations without consideration for the origin. At t
 
 *)
 
-(* FIXME perhaps this would be better as a queue of blk_ids, and a
-   self-throttling thread on one end *)
-
 open Plist_intf
 open Freelist_intf
 
@@ -43,8 +40,6 @@ module type T = sig
 end
 
 
-
-(* [@@@warning "-26-8"] (\* FIXME *\) *)
 
 (** Make with full sig *)
 module Make_v1(S:S) = struct
@@ -86,15 +81,15 @@ module Make_v1(S:S) = struct
      transient list by reading from the head of the on-disk list and
      returning new elts. *)
 
-  (** The disk_thread gets triggered when we fall below tr_lower bound. The disk_thread
-      then repeatedly goes to disk and uses the resulting frees to
-      satisfy the waiting threads; the disk_thread only finishes
-      doing this if the number of transients AFTER satisfying the
-      waiting threads is at least tr_lower. 
+  (** The disk_thread gets triggered when we fall below tr_lower bound. 
+      The disk_thread then repeatedly goes to disk and uses the
+      resulting frees to satisfy the waiting threads; the disk_thread
+      only finishes doing this if the number of transients AFTER
+      satisfying the waiting threads is at least tr_lower.
       
-      FIXME we may need to throttle if the number of waiters keeps growing, or at least
-      never shrinks to 0; perhaps the disk thread exponentially
-      increases the number of blocks it scans each time
+      $(CONSIDER()) we may need to throttle if the number of waiters keeps
+      growing, or at least never shrinks to 0; perhaps the disk thread
+      exponentially increases the number of blocks it scans each time
 
       NOTE that when we advance the hd, the old head becomes free
       
@@ -114,7 +109,7 @@ module Make_v1(S:S) = struct
       | Error () -> return `End_of_plist 
       | Ok {old_hd; old_elts; _ } -> (
           (* (2) ---------- *) 
-          (* FIXME shouldn't this be sync hd? origin changed *)
+          (* $(FIXME("""shouldn't this be sync hd? origin changed""")) *)
           plist_ops.sync_tl () >>= fun () ->
           
           (* (3) ---------- *)
@@ -168,8 +163,9 @@ module Make_v1(S:S) = struct
         transient elts
       - (2.3) And satisfy any waiting requests
       - (3) Finally, try to get a free element; if there are no
-        transient frees, we add ourselves to the wait list FIXME not
-        clear that our request will ever be satisfied?
+        transient frees, we add ourselves to the wait list 
+      
+      $(FIXME("not clear that our request will ever be satisfied?"))
 
   *)
   let alloc () =
@@ -178,7 +174,8 @@ module Make_v1(S:S) = struct
         match List.length s.transient < tr_lower && not s.disk_thread_active with
         | false -> return false
         | true -> 
-          (* FIXME we must ensure that the freelist state is protected eg with a mutex *)
+          (* $(FIXME("""we must ensure that the freelist state is
+             protected eg with a mutex""")) *)
           set_state {s with disk_thread_active=true} >>= fun () -> return true)
 
     (* (2) ---------- *)
@@ -195,19 +192,20 @@ module Make_v1(S:S) = struct
                                attempting to use min_free\n%!" __FILE__;
                 with_freelist.with_state (fun ~state ~set_state -> 
                     match state.min_free with
-                    | None -> failwith "FIXME at this point there are \
-                                        no free elements and no \
-                                        min_free"
+                    | None -> 
+                      (* $(FIXME("Need to quit gracefully if no frees")) *)
+                      failwith "At this point there are no free \
+                                elements and no min_free"
                     | Some elt -> 
                       (* (2.2) ---------- *)
                       let num_to_alloc = min_free_alloc_size+List.length state.waiting in
                       Printf.printf "%s: num_to_alloc=%d\n%!" __FILE__ num_to_alloc;
                       min_free_alloc elt num_to_alloc |> fun (elts,elt) -> 
-                      (* FIXME as well as set_state, we should record
-                         the new min_free elt on disk synchronously
-                         otherwise there is a danger that we crash and
-                         then reallocate some elts that have already
-                         been allocated *)
+                      (* $(FIXME("""As well as set_state, we should
+                         record the new min_free elt on disk
+                         synchronously otherwise there is a danger
+                         that we crash and then reallocate some elts
+                         that have already been allocated""")) *)
                       Printf.printf "%s: post disk: adding new \
                                      transients from min_free\n%!" __FILE__; 
                       (* (2.3) ---------- *)
@@ -217,7 +215,9 @@ module Make_v1(S:S) = struct
                       (state.transient@elts,state.waiting) |> iter_k (fun ~k (elts,waiting) ->
                           match elts,waiting with
                           | _,[] -> return (elts,[])
-                          | [],_ -> failwith "we need to allocate even more! FIXME"
+                          | [],_ -> 
+                            (* $(FIXME("""handle this case""")) *)
+                            failwith "we need to go back and allocate even more! FIXME"
                           | e::elts,w::waiting -> 
                             ev_signal w e >>= fun () ->
                             k (elts,waiting)) >>= fun (elts,waiting) -> 
@@ -227,23 +227,22 @@ module Make_v1(S:S) = struct
                                   (* FIXME transient=[]? no, just < tr_lower *)
                                   waiting;
                                   disk_thread_active=false;
-                                  (* FIXME it clearer why this has to
-                                     be here - the disk_thread
-                                     finished long ago *)
+                                  (* $(FIXME("""make it clearer why this
+                                     has to be here - the disk_thread
+                                     finished long ago""")) *)
                                   min_free=Some(elt) }
                   )
             end
           in
-          (* FIXME add min_free_elt to freelist state *)
           async t) >>= fun () ->
 
     (* (3) ---------- *)
     with_freelist.with_state (fun ~state:s ~set_state -> 
         match s.transient with
         | [] -> (
-            (* FIXME are we guaranteed that the disk thread is active?
+            (* $(FIXME("""are we guaranteed that the disk thread is active?
                not necessarily? and so we may not ever get our request
-               satisfied? *)
+               satisfied?""")) *)
             (* assert(s.disk_thread_active=true); *)
             (* we need to have an invariant: after the disk thread
                runs and frees all the waiting threads, then the
@@ -274,8 +273,8 @@ module Make_v1(S:S) = struct
       a backing block for the list itself when we need to extend the
       list 
       
-      FIXME this is somewhat inefficient because we invoke plist.add
-      multiple times (rather than appending a whole blk of blk_ids)
+      $(CONSIDER("""This is somewhat inefficient because we invoke plist.add
+      multiple times (rather than appending a whole blk of blk_ids)"""))
   *)
   let free_elts xs =
     match version with
@@ -316,18 +315,12 @@ module Make_v1(S:S) = struct
         | false -> (
             set_state {s with transient}))
 
-  
+
+  (* $(FIXME("Need to implement the many versions of alloc and free")) *)
   let free_many pl = failwith "FIXME" 
 
   let sync () = 
     plist_ops.sync_tl () >>= fun () ->
-(*
-    plist_ops.get_origin () >>= fun rinf -> 
-    write_origin ~blk_dev_ops ~blk_id:origin ~origin:{
-      hd=rinf.hd; tl=rinf.tl; blk_len=rinf.blk_len;
-      min_free=failwith "FIXME"
-    } >>= fun () ->
-*)
     sync ()
 
   let get_origin () = 
@@ -378,8 +371,8 @@ let make (type blk_id blk buf elt t) x : (elt,blk_id,t)freelist_ops =
 
 let _ = make
 
-(* FIXME need to think a bit more about how the freelist is supposed
-   to take care of the syncs (and similarly for plist) *)
+(* $(FIXME("""need to think a bit more about how the freelist is supposed
+   to take care of the syncs (and similarly for plist)""")) *)
 let wrap_with_origin_updates ~monad_ops ~(freelist_ops:_ freelist_ops) ~write_origin =
   let ( >>=) = monad_ops.bind in 
   (* let return = monad_ops.return in *)

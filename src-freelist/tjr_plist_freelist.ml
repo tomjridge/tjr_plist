@@ -19,6 +19,10 @@ module Fl_origin = Freelist_intf.Fl_origin
 type ('a,'buf,'blk_id,'t) freelist_factory = 
   ('a,'buf,'blk_id,'t) Freelist_intf.freelist_factory
 
+type ('a,'blk_id,'t) freelist_ops = 
+  ('a,'blk_id,'t) Freelist_intf.freelist_ops
+
+
 
 (** {2 Make functors} *)
 

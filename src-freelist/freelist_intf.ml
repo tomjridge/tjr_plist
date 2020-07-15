@@ -29,15 +29,16 @@ and ('elt,'blk_id) for_blk_ids =
 
 module Fl_origin = struct
   open Bin_prot.Std
+  open Sexplib.Std
   (* $(PIPE2SH("""sed -n '/type[ ][^=]*fl_origin/,/}/p' >GEN.fl_origin.ml_""")) *)
   type ('a,'blk_id) fl_origin = {
     hd: 'blk_id;
     tl: 'blk_id;
     blk_len: int;
     min_free: 'a option
-  }[@@deriving bin_io]
+  }[@@deriving bin_io, sexp]
 
-  type ('a,'blk_id) t = ('a,'blk_id) fl_origin[@@deriving bin_io]
+  type ('a,'blk_id) t = ('a,'blk_id) fl_origin[@@deriving bin_io, sexp]
 end
 
 
@@ -56,7 +57,8 @@ type ('a,'blk_id,'t) freelist_ops = {
 }
 (** alloc_many: int is the number of blk_ids although this sort-of
    forces us to unmarshal the whole block; perhaps prefer also storing
-   the number of elements in the block, precisely for this reason FIXME
+   the number of elements in the block, precisely for this reason;
+   maybe something to $(CONSIDER())
 
 free_many: free an entire list of blk_ids, by appending to this
    freelist *)
@@ -119,8 +121,6 @@ type params = <
       
 (* NOTE 'a is 'blk_id when working with the standard freelist *)
 
-(* FIXME implement this freelist_factory for standard types *)
-
 (* $(PIPE2SH("""sed -n '/type[ ].*freelist_factory/,/^>/p' >GEN.freelist_factory.ml_""")) *)
 type ('a,'buf,'blk_id,'t) freelist_factory = <
   version       : ('a, 'blk_id) for_blk_ids; 
@@ -170,8 +170,8 @@ type ('a,'buf,'blk_id,'t) freelist_factory = <
         origin_blk_id:'blk_id -> 
         ('a,'blk_id,'t)freelist_ops -> 
         ('a,'blk_id,'t)freelist_ops;
-      (** A wrapper for freelist_ops. The This automatically syncs the
-         origin block when origin data changes; FIXME more efficient
+      (** A wrapper for freelist_ops. This automatically syncs the
+         origin block when origin data changes; $(CONSIDER()) more efficient
          would be to sync only when hd advances. It is assumed that
          initially the origin blk_id is synced *) 
 

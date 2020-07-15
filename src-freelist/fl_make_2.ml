@@ -138,16 +138,22 @@ module Fl_example_1 = struct
       let origin = Fl_origin.{hd;tl;blk_len;min_free } in
       write_origin ~blk_dev_ops ~blk_id ~origin
 
+    type fl_origin' = (r,r) Fl_origin.t[@@deriving sexp]
+
     (* NOTE this doesn't sync the origin *)
     let restore' blk_id = 
       read_origin ~blk_dev_ops ~blk_id >>= fun origin ->
+      Printf.printf "%s: freelist restored: %s\n%!" __FILE__ 
+        (origin |> sexp_of_fl_origin' |> Sexplib.Sexp.to_string_hum);
       let fl = empty_freelist ~min_free:origin.min_free in
       let pl_origin = fl_origin_to_pl origin in
       plist_ops pl_origin >>= fun plist_ops ->
       with_plist_ops plist_ops |> fun x -> 
       x#with_locked_ref fl |> return
 
+
     let restore ~autosync ~origin:blk_id = 
+      Printf.printf "%s: restoring freelist from %d\n%!" __FILE__ (B.to_int blk_id);
       restore' blk_id >>= fun obj -> 
       let freelist_ops = obj#freelist_ops in
       let freelist_ops' = 

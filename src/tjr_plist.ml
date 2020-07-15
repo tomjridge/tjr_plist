@@ -50,6 +50,9 @@ module Plist_intf = Plist_intf
 
 module Pl_origin = Plist_intf.Pl_origin
 
+type ('a,'buf, 'blk_id, 't) plist_ops =
+  ('a,'buf, 'blk_id, 't) Plist_intf.plist_ops
+
 type ('a,'blk_id,'blk,'buf,'t) plist_factory
   = ('a,'blk_id,'blk,'buf,'t) Plist_intf.plist_factory
 
