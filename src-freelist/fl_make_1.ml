@@ -136,6 +136,7 @@ module Make_v1(S:S) = struct
                  take this opportunity to unset the
                  disk_thread_active flag; we have to do this while
                  we have the state *)
+              Printf.printf "%s: %d\n%!" __FILE__ __LINE__;
               set_state { s with disk_thread_active=(not continue_) } >>= fun () ->
               return (`Ok continue_)) )
     in
@@ -176,6 +177,8 @@ module Make_v1(S:S) = struct
         | true -> 
           (* $(FIXME("""we must ensure that the freelist state is
              protected eg with a mutex""")) *)
+          assert(not s.disk_thread_active);
+          Printf.printf "%s: %d\n%!" __FILE__ __LINE__;
           set_state {s with disk_thread_active=true} >>= fun () -> return true)
 
     (* (2) ---------- *)
@@ -223,6 +226,7 @@ module Make_v1(S:S) = struct
                             k (elts,waiting)) >>= fun (elts,waiting) -> 
                       Printf.printf "%s: post disk_thread: setting state\n%!" __FILE__;
                       Printf.printf "%s: |transient| = %d\n%!" __FILE__ (List.length elts);
+                      Printf.printf "%s: %d\n%!" __FILE__ __LINE__;
                       set_state { transient=elts; 
                                   (* FIXME transient=[]? no, just < tr_lower *)
                                   waiting;
@@ -248,13 +252,15 @@ module Make_v1(S:S) = struct
                runs and frees all the waiting threads, then the
                remaining transient elts are at least tr_lower *)
             Printf.printf "%s: thread waits for transient free elt\n%!" __FILE__;
-            ev_create () >>= fun (ev: elt event) ->              
+            ev_create () >>= fun (ev: elt event) ->
+            Printf.printf "%s: %d\n%!" __FILE__ __LINE__;
             set_state {s with waiting=ev::s.waiting } >>= fun () -> 
             (* NOTE do we have to release the state before waiting?
                yes; and we assume that if an event is fulfilled before
                waiting on it, the wait succeeds ie events are one-shot *)
             return (`Ev ev))
         | elt::transient -> 
+          Printf.printf "%s: %d\n%!" __FILE__ __LINE__;
           set_state {s with transient} >>= fun () ->
           return (`Elt elt)) >>= fun x ->
 
@@ -311,14 +317,18 @@ module Make_v1(S:S) = struct
             (* flush some to disk *)
             transient |> List_.split_at ((tr_upper+tr_lower) / 2) |> fun (xs,ys) ->
             free_elts xs >>= fun () ->
+            Printf.printf "%s: %d\n%!" __FILE__ __LINE__;
             set_state {s with transient=ys })                
         | false -> (
+            Printf.printf "%s: %d\n%!" __FILE__ __LINE__;            
             set_state {s with transient}))
 
 
   (* $(FIXME("Need to implement the many versions of alloc and free")) *)
   let free_many pl = failwith "FIXME" 
 
+  (* $(FIXME("""this doesn't sync the origin, but perhaps it
+     should... or is this handled by autosync?""")) *)
   let sync () = 
     plist_ops.sync_tl () >>= fun () ->
     sync ()

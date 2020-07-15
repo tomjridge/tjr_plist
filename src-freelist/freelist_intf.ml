@@ -116,7 +116,8 @@ let _ = empty_freelist
 type params = <
   tr_upper:int;
   tr_lower:int;
-  min_free_alloc_size:int
+  min_free_alloc_size:int;
+  (* debug: ('a freelist_im -> string)option;    *)
 >
       
 (* NOTE 'a is 'blk_id when working with the standard freelist *)

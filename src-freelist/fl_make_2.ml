@@ -10,6 +10,20 @@ open Plist_intf
 open Shared_ctxt
 open Freelist_intf
 
+module Pvt_debug = struct
+  open Sexplib.Std
+  type t = {
+    transient: r list;
+    min_free: r option;
+    disk_thread_active:bool
+  }[@@deriving sexp]
+
+  let to_string (x:_ freelist_im) = 
+    let Freelist_intf.{transient;min_free;disk_thread_active;_} = x in
+    {transient;min_free;disk_thread_active} |> sexp_of_t |> Sexplib.Sexp.to_string_hum
+end
+
+
 (** Example for blk_ids *)
 module Fl_example_1 = struct
   let version = { e2b=(fun x -> x); b2e=(fun x->x) }
@@ -94,7 +108,16 @@ module Fl_example_1 = struct
       let with_locked_ref = fun fl ->
         let freelist_ref = ref fl in
         let with_state' = With_lwt.with_locked_ref freelist_ref in
-        let freelist_ops = with_state with_state' in
+        (* Add some debugging *)
+        let with_state'' = 
+          let with_state = with_state'.with_state in
+          { with_state=(fun f -> 
+                with_state (fun ~state ~set_state -> return (state,set_state)) >>= fun (state,set_state) ->
+                f ~state ~set_state:(fun (s:_ freelist_im) -> 
+                    Printf.printf "%s: freelist set_state called: %s\n" __FILE__ (Pvt_debug.to_string s);
+                    set_state s)) }
+        in
+        let freelist_ops = with_state with_state'' in
         object
           method freelist_ops=freelist_ops
           method freelist_ref=freelist_ref
@@ -108,7 +131,8 @@ module Fl_example_1 = struct
     (** This wraps the freelist operations in an inefficient piece of
        code that checks whether the origin has changed, and if it has,
        it syncs the origin *)
-    (* $(FIXME("""consider improving the freelist_ops wrapping""")) *)
+    (* $(FIXME("""consider improving the freelist_ops wrapping; FIXME
+       also this is not concurrent safe""")) *)
     let wrap (type a b) ~sync_origin ~(freelist_ops:_ freelist_ops) (f:a -> (b,t)m) = 
       let { get_origin; _ } = freelist_ops in
       fun a -> 
