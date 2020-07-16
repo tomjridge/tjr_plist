@@ -20,7 +20,15 @@ module Pvt_debug = struct
 
   let to_string (x:_ freelist_im) = 
     let Freelist_intf.{transient;min_free;disk_thread_active;_} = x in
+    (* only store the beginning and end of the transients... *)
+    let transient = 
+      if List.length transient > 10 then 
+        (List_.take 5 transient)@(transient |> List.rev |> List_.take 5  |> List.rev)
+      else
+        transient
+    in
     {transient;min_free;disk_thread_active} |> sexp_of_t |> Sexplib.Sexp.to_string_hum
+                                                              
 end
 
 
@@ -32,9 +40,12 @@ module Fl_example_1 = struct
 
   module M = struct
     (* open Fl_origin *)
-    type t = (r,r) Fl_origin.t[@@deriving bin_io]
+    type t = (r,r) Fl_origin.t[@@deriving bin_io, sexp]
     let max_sz = 9*3 + 10 
     (* assume hd,tl,blk_len and min_free option can be marshalled in this many bytes *)
+
+    let origin_to_string (o:t) = 
+      o |> sexp_of_t |> Sexplib.Sexp.to_string_hum
   end
 
   let origin_mshlr = 
@@ -46,9 +57,12 @@ module Fl_example_1 = struct
 
   let read_origin ~blk_dev_ops ~blk_id =
     blk_dev_ops.read ~blk_id >>= fun blk ->       
-    Origin_mshlr.unmarshal blk |> return
+    Origin_mshlr.unmarshal blk |> fun o -> 
+    Printf.printf "%s: read origin %d %s\n%!" __FILE__ (blk_id|>B.to_int) (o|>M.origin_to_string);
+    return o
 
   let write_origin ~blk_dev_ops ~blk_id ~origin =
+    Printf.printf "%s: write origin %d %s\n%!" __FILE__ (blk_id|>B.to_int) (origin|>M.origin_to_string);
     Origin_mshlr.marshal origin |> fun blk ->
     blk_dev_ops.write ~blk_id ~blk
 
