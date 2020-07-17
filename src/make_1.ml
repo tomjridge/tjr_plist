@@ -58,7 +58,7 @@ module Make_v1(S:S) = struct
    *****************************************)
 
   module A = struct
-    let { create;get=_;len=_FIXME; _} = buf_ops 
+    let Buf_ops.{ create;get=_;len=_FIXME; _} = buf_ops 
     let { blk_sz;of_bytes=_;to_bytes=_;of_string;_ } = blk_ops
     let { elt_mshlr; blk_id_mshlr; blk_to_buf; buf_to_blk } = 
       plist_marshal_info 

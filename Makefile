@@ -22,8 +22,6 @@ run_freelist_test:
 update_generated_doc::
 	cd src && (ocamldoc_pyexpander plist_intf.ml)
 	cd src && (ocamldoc_pyexpander summary.t.ml > summary.ml)
-	cd src-freelist && (ocamldoc_pyexpander freelist_intf.ml)
-	cd src-freelist && (ocamldoc_pyexpander summary.t.ml > summary.ml)
 	$(MAKE) docs
 
 # for emacs completion
