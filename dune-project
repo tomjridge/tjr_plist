@@ -23,11 +23,12 @@
 ;;          (depends ocamlfind dune tjr_plist)
 ;; )
 
-(package 
-         (name tjr_plist_freelist)
-         (synopsis "A freelist")
-         (depends ocamlfind dune tjr_plist)
-)
+;; note moved to impfs
+;; (package 
+;;          (name tjr_plist_freelist)
+;;          (synopsis "A freelist")
+;;          (depends ocamlfind dune tjr_plist)
+;; )
 
 
 ;; (package 
