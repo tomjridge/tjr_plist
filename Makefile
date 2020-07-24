@@ -8,16 +8,17 @@ all::
 
 # we need to copy the executables into this directory
 copy_executables:
-	$(DUNE) exec cp `which freelist_test` ${CURDIR}
+#	cp _build/default_test` ${CURDIR}
 
 # run_plist_test:
 # 	rm -f plist_on_disk.store
 # 	time $(DUNE) exec plist_test
 
-run_freelist_test:
-	rm -f freelist_example.store
-#	./freelist_test 1
-	./freelist_test 2
+# FIXME restore these test exes
+# run_freelist_test:
+# 	rm -f freelist_example.store
+# #	./freelist_test 1
+# 	./freelist_test 2
 
 update_generated_doc::
 	cd src && (ocamldoc_pyexpander plist_intf.ml)
