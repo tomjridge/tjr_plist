@@ -18,13 +18,13 @@ type ('blk_id,'buf) plist = {
   buffer  : 'buf;
   off     : int;
   blk_len : int;
-  dirty   : bool; (** may not have been written to disk *)
+  tl_dirty: bool; (** tl may not have been written to disk *)
 }
 
 type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
   monad_ops          :'t monad_ops;
   buf_ops            :'buf buf_ops;
-  blk_ops            : 'blk blk_ops;
+  blk_ops            : ('blk,'buf) blk_ops;
   plist_marshal_info : ('a,'blk_id,'blk,'buf) plist_marshal_info;
   plist_marshal_ops  : ('a,'blk_id,'blk) plist_marshal_ops; 
   with_blk_dev_ops   :  
@@ -44,9 +44,9 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
 
         read_from_hd : 'blk_id -> ( ('a list * 'blk_id option) list, 't) m; 
 
-        (* FIXME this should follow pointers from the tl if any *)
+        (* NOTE if the resulting plist has tl <> the origin tl, then
+           the origin should probably be updated for efficiency *)
         from_endpts  : 'blk_id pl_origin -> (('blk_id,'buf)plist,'t)m;
-
 
       >;
 
@@ -71,13 +71,19 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
     >
 >
 
+  type ('a,'blk_id,'blk,'buf) plist_marshal_info = {
+    elt_mshlr     : ('a option,'buf)mshlr;
+    blk_id_mshlr  : ('blk_id option,'buf)mshlr;
+  }
+
 type ('a,'buf (* FIXME *),'blk_id, 't) plist_ops = {
+  (* NOTE operations which REQUIRE an update to origin are marked with an exclam *)
   add           : nxt:'blk_id -> elt:'a -> ('blk_id option,'t) m;
   add_if_room   : 'a -> (bool,'t)m;
 
   sync_tl       : unit -> (unit,'t)m;
 
-  adv_hd        : unit -> ( ('a,'blk_id) adv_hd or_error,'t)m; 
+  adv_hd        : unit -> ( ('a,'blk_id) adv_hd or_error,'t)m; (* ! *)
   adv_tl        : 'blk_id -> (unit,'t)m;
 
   blk_len       : unit -> (int,'t)m;

@@ -1,6 +1,8 @@
 (** A persistent (on-disk) list. The freelist based on this is 
 concurrent-safe (multiple writers are allowed, but only a single thread interacts with disk), but this code is not.
 
+NOTE the freelist code has moved to the imp_fs repo.
+
 {%html:
 <img width='100%' src="https://docs.google.com/drawings/d/e/2PACX-1vT1LGM8Sm7USD8LF_CGLUVZ270PK4vk5LcBrENxjcebpRUYq4jxPpgCTzNFsIS8TOgrcsVvcbZcNJ-M/pub?w=974&amp;h=871">
 %}
@@ -70,8 +72,6 @@ let pl_examples =
   let plist_marshal_info: int plist_marshal_info = {
     elt_mshlr=mshlrs#for_int_option;
     blk_id_mshlr=mshlrs#for_blk_id_option;
-    blk_to_buf=blk_to_buf;
-    buf_to_blk=buf_to_blk;
   }
   in
   let int_plist_factory = 
@@ -80,8 +80,6 @@ let pl_examples =
   let plist_marshal_info: Shared_ctxt.r plist_marshal_info = {
     elt_mshlr=mshlrs#for_blk_id_option;
     blk_id_mshlr=mshlrs#for_blk_id_option;
-    blk_to_buf=blk_to_buf;
-    buf_to_blk=buf_to_blk;
   }
   in
   let r_plist_factory = 

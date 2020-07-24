@@ -8,6 +8,11 @@ We store the list of elts from offset off0 (say); the nxt pointer
    nxt pointer). Only when we write to disk do we update the buffer
     with the None pointer.
 
+    The idea is to make an on-disk list structure that can be updated
+    extremely quickly (one block write and one barrier in the common
+    case, without having to udpate the origin since we can just follow
+    tl pointers).
+
 
 Plist block structure:
 
@@ -18,7 +23,9 @@ Plist block structure:
 Some invariants: 
 
 - adding an element, or setting the nxt pointer, marshals immediately
-- the EOL marker is only marshalled when syncing the block (presumably to avoid repeated marshalling of this marker)
+- the EOL marker is only marshalled when syncing the tl block
+  (presumably to avoid repeated marshalling of this marker? seems
+  premature)
 
   *)
 
@@ -34,7 +41,7 @@ module type S = sig
   type t
 
   val buf_ops:buf buf_ops
-  val blk_ops:blk blk_ops
+  val blk_ops:(blk,buf) blk_ops
 
   type a
   val plist_marshal_info: (a,blk_id,blk,buf)plist_marshal_info
@@ -52,19 +59,19 @@ module Make_v1(S:S) = struct
   module S = S
   open S
 
+  let Blk_ops.{ blk_sz; blk_to_buf;buf_to_blk } = blk_ops
+  let buf_sz_i = Blk_sz.to_int blk_sz 
 
   (*****************************************
    * Start with basic marshalling routines *
    *****************************************)
 
   module A = struct
-    let Buf_ops.{ create;get=_;len=_FIXME; _} = buf_ops 
-    let { blk_sz;of_bytes=_;to_bytes=_;of_string;_ } = blk_ops
-    let { elt_mshlr; blk_id_mshlr; blk_to_buf; buf_to_blk } = 
+    let Buf_ops.{ buf_create; _} = buf_ops 
+    let { elt_mshlr; blk_id_mshlr } = 
       plist_marshal_info 
-    let buf_sz = Blk_sz.to_int blk_sz 
-    let _buf_space ~off = buf_sz - off 
-    let can_fit ~off ~n = off+n<=buf_sz 
+    let _buf_space ~off = buf_sz_i - off 
+    let can_fit ~off ~n = off+n<=buf_sz_i
 
     let max_blk_id_sz = blk_id_mshlr.max_elt_sz 
     let max_elt_sz = elt_mshlr.max_elt_sz 
@@ -81,7 +88,7 @@ module Make_v1(S:S) = struct
     (* we need to fit an elt and a None list terminator *)
     let can_fit_elt off = can_fit ~off ~n:(2*max_elt_sz) 
 
-    let _empty_blk () = String.make buf_sz chr0 |> of_string
+    (* let _empty_blk () = String.make buf_sz_i chr0 |> of_string *)
 
     let m_blk_id = blk_id_mshlr.mshl 
     let u_blk_id = blk_id_mshlr.umshl
@@ -96,7 +103,7 @@ module Make_v1(S:S) = struct
        end-of-list marker *)
     let x_to_buf (elts,nxt) : buf*int = 
       (* write nxt *)
-      create buf_sz |> fun buf ->
+      buf_create buf_sz_i |> fun buf ->
       (buf,0) |> m_blk_id nxt |> fun (buf,i) -> 
       assert(i<=max_blk_id_sz);
       (buf,off0,elts) |> iter_k (fun ~k (buf,off,elts) ->
@@ -119,6 +126,8 @@ module Make_v1(S:S) = struct
           | Some e -> k (off,e::acc))
       |> fun (es,off) -> 
       es,nxt
+
+    
 
     let x_to_blk (elts,nxt) = 
       x_to_buf (elts,nxt) |> fun (buf,_) -> buf_to_blk buf
@@ -143,17 +152,18 @@ module Make_v1(S:S) = struct
      * Now incorporate the block device *
      ************************************)
 
-    open (struct
-      let ( >>= ) = monad_ops.bind 
-      let return = monad_ops.return 
-      let { write; read; _ } = blk_dev_ops 
+    let ( >>= ) = monad_ops.bind 
+    let return = monad_ops.return 
 
-      let write_sync ~blk_id ~blk = 
-        write ~blk_id ~blk >>= fun () ->
-        barrier ()
+    let { write=write0; read; _ } = blk_dev_ops
 
-    end)
-    
+    (* NOTE this is the only place where write0 is used *)
+
+    let write_and_barrier ~blk_id ~blk = 
+      write0 ~blk_id ~blk >>= fun () ->
+      barrier ()
+
+    (** Make an empty list at blk_id *)
     let mk_empty blk_id = 
       A.x_to_buf ([],None) |> fun (buf,off) -> 
       let pl = { hd=blk_id;
@@ -162,14 +172,14 @@ module Make_v1(S:S) = struct
                  buffer=buf;
                  off;
                  (* nxt_is_none=true; *)
-                 dirty=true;
+                 tl_dirty=true;
                }
       in
-      let blk = A.buf_to_blk buf in
-      write_sync ~blk_id ~blk >>= fun () ->
-      return {pl with dirty=false}
+      let blk = buf_to_blk buf in
+      write_and_barrier ~blk_id ~blk >>= fun () ->
+      return {pl with tl_dirty=false}
 
-
+    (** Read the plist from disk, starting at the head; O(n) in length of list *)
     let read_from_head blk_id = 
       (blk_id,[]) |> iter_k (fun ~k (blk_id,acc) -> 
           read ~blk_id >>= fun blk ->
@@ -181,13 +191,23 @@ module Make_v1(S:S) = struct
           | Some nxt -> k (nxt,(elts,Some nxt)::acc))
 
 
-    (* FIXME rename to eg create_plist_from_tl *)
+    (* FIXME rename to eg restore_plist_from_tl *)
+    (** Restore the plist given hd and tl pointers (where tl may
+       actually have nxt set, since tl is usually just the last SYNCED
+       tl); O(delta) where delta is the length of the list after the
+       tl block. *)
     let init_from_endpts ~hd ~tl ~blk_len = 
-      read ~blk_id:tl >>= fun blk ->
-      A.blk_to_x blk |> fun (elts,nxt) ->
-      (elts,nxt) |> A.x_to_buf |> fun (buf,off) ->                  
-      return { hd; tl; buffer=buf; off; blk_len; dirty=false }
-
+      (* starting from tl, we follow nxt pointers *)
+      (tl,blk_len) |> iter_k (fun ~k (blk_id,blk_len) -> 
+          read ~blk_id >>= fun blk ->
+          A.blk_to_x blk |> fun (elts,nxt) ->
+          match nxt with 
+          | None -> 
+            (elts,nxt) |> A.x_to_buf |> fun (buf,off) ->
+            return { hd; tl; buffer=buf; off; blk_len; tl_dirty=false }
+          | Some nxt -> 
+            k (nxt,blk_len+1))
+              
     (*****************************************************************
      * Initialization and constructing the operations via with-state *
      *****************************************************************)
@@ -230,7 +250,7 @@ module Make_v1(S:S) = struct
         assert(A.can_fit_elt off);
         (* write an elt and update the pointer offset *)
         (buf,off) |> A.m_elt (Some elt) |> fun (buf,off) -> 
-        {state with buffer=buf; off; dirty=true}
+        {state with buffer=buf; off; tl_dirty=true}
 
       (* don't use blk_dev *)
       let set_nxt nxt buf =
@@ -239,9 +259,9 @@ module Make_v1(S:S) = struct
         buf
 
       (* don't use blk_dev *)
-      let move_to_nxt ~hd ~nxt ~blk_len ~buf ~off ~dirty =
+      let move_to_nxt ~hd ~nxt ~blk_len ~buf ~off ~tl_dirty =
         (* assert(buf_to_x state.buffer |> snd = nxt); *)
-        { hd; tl=nxt; blk_len; buffer=buf; off; (* nxt_is_none=true; *) dirty }
+        { hd; tl=nxt; blk_len; buffer=buf; off; (* nxt_is_none=true; *) tl_dirty }
 
 
       let add_elt_list_terminator off buf = 
@@ -286,18 +306,17 @@ module Make_v1(S:S) = struct
          optimization we haven't written the eol
          terminator *)
          let sync' ~state = 
-         let { tl; buffer=buf; dirty; off; _ } = state in
-         match dirty with
+         let { tl; buffer=buf; tl_dirty; off; _ } = state in
+         match tl_dirty with
          | true -> (
             (* marshal None at off *)
             add_elt_list_terminator off buf |> fun buf ->
             write ~blk_id:tl ~blk:(A.buf_to_blk buf) >>= fun () ->
-            return {state with dirty=false })
+            return {state with tl_dirty=false })
          | false -> return state
       *)
-
-      let add = 
-        fun ~nxt ~elt ->
+          
+      let add ~nxt ~elt =
         with_state.with_state (fun ~state ~set_state ->
             let { off; _ } = state in
             match A.can_fit ~off ~n:(2*A.max_elt_sz) with
@@ -308,24 +327,23 @@ module Make_v1(S:S) = struct
             | false -> (
                 (* write the new blk first *)
                 A.x_to_buf ([elt],None) |> fun (buf,off) ->
-                write_sync ~blk_id:nxt ~blk:(A.buf_to_blk buf) >>= fun () ->
+                write_and_barrier ~blk_id:nxt ~blk:(buf_to_blk buf) >>= fun () ->
                 (* write old blk with nxt *)
                 let blk_id = state.tl in
                 let buf' = state.buffer |> set_nxt (Some nxt)
                            |> add_elt_list_terminator state.off
                 in
-                write_sync ~blk_id ~blk:(buf' |> A.buf_to_blk) >>= fun () ->
-                move_to_nxt ~hd:state.hd ~nxt ~blk_len:(state.blk_len+1) ~buf ~off ~dirty:false 
+                write_and_barrier ~blk_id ~blk:(buf' |> buf_to_blk) >>= fun () ->
+                move_to_nxt ~hd:state.hd ~nxt ~blk_len:(state.blk_len+1) ~buf ~off ~tl_dirty:false 
                 |> set_state >>= fun () ->
                 return None))
 
-      let sync_tl =
-        fun () ->
+      let sync_tl () =
         with_state.with_state (fun ~state ~set_state ->
-            let { tl=blk_id; buffer=buf; off; dirty; _ } = state in
+            let { tl=blk_id; buffer=buf; off; tl_dirty; _ } = state in
             buf |> add_elt_list_terminator off |> fun buf ->
-            write_sync ~blk_id ~blk:(A.buf_to_blk buf) >>= fun () ->
-            set_state {state with buffer=buf; dirty=false})
+            write_and_barrier ~blk_id ~blk:(buf_to_blk buf) >>= fun () ->
+            set_state {state with buffer=buf; tl_dirty=false})
 
       let adv_hd () = 
         with_state.with_state (fun ~state ~set_state ->
@@ -333,7 +351,11 @@ module Make_v1(S:S) = struct
             read ~blk_id:hd >>= fun old_blk ->
             old_blk |> A.blk_to_x |> fun (elts,nxt) ->        
             match nxt with
-            | None -> return (Error ())
+            | None -> 
+              (* No nxt pointer *)
+              assert(state.blk_len=1); (* should hold *)
+              assert(state.hd=state.tl);
+              return (Error ())
             | Some new_hd -> 
               set_state { state with hd=new_hd;blk_len=state.blk_len-1 } >>= fun () ->
               return (Ok { old_hd=hd; old_elts=elts; new_hd }))
@@ -342,27 +364,34 @@ module Make_v1(S:S) = struct
         with_state.with_state (fun ~state ~set_state ->
             (* write the new blk first *)
             A.x_to_buf ([],None) |> fun (buf,off) ->
-            write_sync ~blk_id:nxt ~blk:(A.buf_to_blk buf) >>= fun () ->
+            write_and_barrier ~blk_id:nxt ~blk:(buf_to_blk buf) >>= fun () ->
             (* write old blk with nxt *)
             let blk_id = state.tl in
             let buf' = state.buffer |> set_nxt (Some nxt)
                        |> add_elt_list_terminator state.off
             in
-            write_sync ~blk_id ~blk:(buf' |> A.buf_to_blk) >>= fun () ->
-            move_to_nxt ~hd:state.hd ~nxt ~blk_len:(state.blk_len+1) ~buf ~off ~dirty:false
+            write_and_barrier ~blk_id ~blk:(buf' |> buf_to_blk) >>= fun () ->
+            move_to_nxt ~hd:state.hd ~nxt ~blk_len:(state.blk_len+1) ~buf ~off ~tl_dirty:false
             |> set_state >>= fun () ->
             return ())
 
 
-      (* Read a blk, without assuming that it is a marshalled plist block *)
+      (* Read a blk, without assuming that it is a marshalled plist
+         block $(FIXME("""when would we ever call this without
+         assuming the blk is a marshalled plist block? FIXME we should
+         never assume this""")) *)
       let read_blk blk_id = 
         read ~blk_id >>= fun blk ->
         try 
           let x = A.blk_to_x blk in
           return (Ok(A.blk_to_x blk))
-        with _ -> return (Error ())
+        with _ -> (
+          assert(false);
+          return (Error ()))[@@warning "-21"]
 
-      (* Read the hd blk (assuming hd <> tl) from disk *)
+      (* Read the hd blk (assuming hd <> tl) from disk; FIXME this is
+         just for initialization from an in-mem state? where is this
+         used? *)
       let read_hd () =
         get_origin () >>= fun rinf -> 
         (* FIXME following should be a warning on log *)
@@ -375,24 +404,19 @@ module Make_v1(S:S) = struct
         read_blk rinf.hd >>= fun r ->
         match r with
         | Ok x -> return x
-        | Error () -> failwith "read_hd: hd block was not marshalled \
-                                correctly on disk; are you sure it was \
-                                synced?"
+        | Error () -> 
+          (* FIXME surely this should never happen? *)
+          failwith "read_hd: hd block was not marshalled correctly on \
+                    disk; are you sure it was synced?"
 
       (* FIXME perhaps move this outside the plist operations, to init/with_state level *)
       let append pl2 = 
         with_state.with_state (fun ~state ~set_state -> 
             let buf = state.buffer |> set_nxt (Some(pl2.hd)) in
-            write_sync ~blk_id:state.tl ~blk:(A.buf_to_blk buf) >>= fun () ->
-            let { hd; tl; buffer; off; blk_len; dirty=_ } = state in
+            write_and_barrier ~blk_id:state.tl ~blk:(buf_to_blk buf) >>= fun () ->
+            let { hd; tl; buffer; off; blk_len; tl_dirty=_ } = state in
             set_state { hd; tl=pl2.tl; buffer=pl2.buffer; off=pl2.off; 
-                        blk_len=(blk_len+pl2.blk_len); dirty=pl2.dirty })
-                      (*
-                      let read_tl =
-                        get_hd_tl () >>= fun (hd_,tl) ->
-                        read_blk tl
-                      in
-                         *)
+                        blk_len=(blk_len+pl2.blk_len); tl_dirty=pl2.tl_dirty })
 
       let plist_ops = 
         { add;add_if_room;sync_tl;blk_len;adv_hd;adv_tl;get_origin;read_hd;append }
@@ -440,24 +464,31 @@ module Make_v1(S:S) = struct
                and alter so that they correctly sync the origin block
                *)
             let { add; adv_hd; adv_tl; append; get_origin; _ } = plist_ops in
+            (* NOTE this is not concurrent safe *)
             let sync_origin () = 
               get_origin () >>= fun o -> 
               set_and_sync o
             in
+            (* NOTE we don't have to sync at this point, if we restore
+               from tl properly (by reading any nxt pointers) *)
             let add ~nxt ~elt = 
               add ~nxt ~elt >>= function
               | None -> sync_origin() >>= fun () -> return None
               | Some _ as x-> return x
             in
+            (* NOTE we really must sync at this point, since hd is now invalid *)
             let adv_hd () = 
               adv_hd () >>= fun r -> 
               sync_origin () >>= fun () -> 
               return r
             in
+            (* NOTE as with add, no need to sync *)
             let adv_tl blk_id = 
               adv_tl blk_id >>= fun () -> 
               sync_origin () 
             in
+            (* NOTE no need to sync, but following pointers from
+               pl1.tl could be expensive *)
             let append pl = 
               append pl >>= fun () -> 
               sync_origin () 
