@@ -547,6 +547,14 @@ let pl_examples =
   let r_plist_factory = 
     make ~monad_ops ~buf_ops ~blk_ops ~plist_marshal_info
   in
+  let int_int_kvop_plist_factory = 
+    let plist_marshal_info : (int,int)kvop plist_marshal_info = {
+      elt_mshlr=mshlrs#for_int_int_kvop_option;
+      blk_id_mshlr=mshlrs#for_blk_id_option;
+    }
+    in
+    make ~monad_ops ~buf_ops ~blk_ops ~plist_marshal_info
+  in
   (* specialize to Shared_ctxt.r for time being *)
   let origin_ops = 
     let open Shared_ctxt in
@@ -582,6 +590,7 @@ let pl_examples =
   object 
     method for_int : int plist_factory = int_plist_factory      
     method for_blk_id : Shared_ctxt.r plist_factory = r_plist_factory
+    method for_int_int_kvop : (int,int)kvop plist_factory = int_int_kvop_plist_factory
     method origin_factory:(_,_,_)Plist_intf.origin_factory = object
       method monad_ops=monad_ops
       method with_=

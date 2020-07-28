@@ -72,6 +72,11 @@ let pl_examples = Make_1.pl_examples
 
 module Make_simple_plist = Make_2
 
+type ('a,'blk_id,'blk,'buf,'t) simple_plist_factory
+  = ('a,'blk_id,'blk,'buf,'t) Make_simple_plist.simple_plist_factory
+
+type ('a,'blk_id,'t) simple_plist_ops = ('a,'blk_id,'t) Make_simple_plist.simple_plist_ops
+
 let simple_pl_examples = Make_2.examples
 
 
