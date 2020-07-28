@@ -93,6 +93,24 @@ type ('a,'buf (* FIXME *),'blk_id, 't) plist_ops = {
   append        : ('blk_id,'buf) plist -> (unit,'t)m;
 }
 
+type ('a,'blk_id,'blk,'buf,'t) simple_plist_factory = <  
+  plist_factory: 
+    ('a,'blk_id,'blk,'buf,'t) plist_factory;
+
+  convert_to_simple_plist: 
+    monad_ops : 't monad_ops ->
+    freelist_ops : ('blk_id,'t) Shared_freelist.freelist_ops -> 
+    plist_ops : ('a,'buf,'blk_id,'t) plist_ops -> 
+    ('a,'blk_id,'t) simple_plist_ops
+>
+
+type ('a,'blk_id,'t) simple_plist_ops = {
+  add           : 'a -> (unit,'t)m;
+  sync_tl       : unit -> (unit,'t)m;
+  blk_len       : unit -> (int,'t)m;
+  get_origin    : unit -> ('blk_id pl_origin,'t)m;
+}
+
 ]}
 
 *)

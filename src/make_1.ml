@@ -524,3 +524,71 @@ let make (type buf blk_id blk t a) ~buf_ops ~blk_ops ~plist_marshal_info ~monad_
   in
   let module M = Make_v2(S) in
   M.plist_factory ~monad_ops
+
+
+
+(** {2 examples} *)
+
+let pl_examples = 
+  let open Pl_type_abbrevs in
+  let plist_marshal_info: int plist_marshal_info = {
+    elt_mshlr=mshlrs#for_int_option;
+    blk_id_mshlr=mshlrs#for_blk_id_option;
+  }
+  in
+  let int_plist_factory = 
+    make ~monad_ops ~buf_ops ~blk_ops ~plist_marshal_info
+  in
+  let plist_marshal_info: Shared_ctxt.r plist_marshal_info = {
+    elt_mshlr=mshlrs#for_blk_id_option;
+    blk_id_mshlr=mshlrs#for_blk_id_option;
+  }
+  in
+  let r_plist_factory = 
+    make ~monad_ops ~buf_ops ~blk_ops ~plist_marshal_info
+  in
+  (* specialize to Shared_ctxt.r for time being *)
+  let origin_ops = 
+    let open Shared_ctxt in
+    fun 
+      (* ~(r_mshlr:r bp_mshlr)  *)
+      ~(blk_dev_ops :(_,_,_)blk_dev_ops) 
+      ~(blk_id      : r) 
+      ~(sync_blk_id : unit -> (unit,t)m)
+      -> 
+        let r_mshlr = bp_mshlrs#r_mshlr in
+        let bp_mshlr = Plist_intf.Pl_origin.mshlr ~r_mshlr in
+        let ba_mshlr = bp_mshlrs#ba_mshlr ~mshlr:bp_mshlr ~buf_sz:(Blk_sz.to_int blk_sz) in
+        let module M = (val ba_mshlr) in
+        let read = fun () -> blk_dev_ops.read ~blk_id >>= fun blk -> 
+          return (M.unmarshal blk)
+        in
+        let write = fun t ->
+          blk_dev_ops.write ~blk_id ~blk:(M.marshal t) 
+        in
+        let set_and_sync = fun t ->
+          blk_dev_ops.write ~blk_id ~blk:(M.marshal t) >>= fun () -> 
+          sync_blk_id ()
+        in
+        let obj = 
+          object
+            method read=read
+            method write=write
+            method set_and_sync=set_and_sync
+          end
+        in
+        obj
+  in
+  object 
+    method for_int : int plist_factory = int_plist_factory      
+    method for_blk_id : Shared_ctxt.r plist_factory = r_plist_factory
+    method origin_factory:(_,_,_)Plist_intf.origin_factory = object
+      method monad_ops=monad_ops
+      method with_=
+        fun ~blk_dev_ops ~blk_id ~sync_blk_id -> 
+        let x = origin_ops ~blk_dev_ops ~blk_id ~sync_blk_id in
+        (x :> <set_and_sync: _ Plist_intf.Pl_origin.t -> (unit,'t)m>)
+    end
+  end
+
+let _ = pl_examples

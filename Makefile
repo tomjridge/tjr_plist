@@ -22,6 +22,7 @@ copy_executables:
 
 update_generated_doc::
 	cd src && (ocamldoc_pyexpander plist_intf.ml)
+	cd src && (ocamldoc_pyexpander make_2.ml)
 	cd src && (ocamldoc_pyexpander summary.t.ml > summary.ml)
 	$(MAKE) docs
 
