@@ -30,6 +30,11 @@ Some invariants:
   *)
 
 
+(* $(FIXME("""consider moving to a version where we try to write (even
+   if there is not enough space left); if there is an error, we zero
+   out what we just wrote; this way the semantics is deterministic,
+   but we are slightly more efficient""")) *)
+
 open Plist_intf
 
 [@@@warning "-26"] (* FIXME *)

@@ -7,10 +7,12 @@ open Pl_origin
 (* $(CONVENTION("""for restricted types, append some indicator of what
    the fields are; here, af ~ alloc+free; this is less confusing than
    having a type with the same name in a different module """)) *)
-type ('blk_id,'t) freelist_ops_af = {
-  blk_alloc : (unit -> ('blk_id,'t)m);
-  blk_free  : ('blk_id -> (unit,'t)m);
-}
+type ('blk_id,'t) freelist_ops_af = 
+  ('blk_id,'t)blk_allocator_ops = 
+  {
+    blk_alloc : (unit -> ('blk_id,'t)m);
+    blk_free  : ('blk_id -> (unit,'t)m);
+  }
 
 
 (* $(PIPE2SH("""sed -n '/type[ ].*simple_plist_ops = /,/^}/p' >GEN.simple_plist_ops.ml_""")) *)
