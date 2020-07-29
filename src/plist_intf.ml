@@ -217,8 +217,25 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
       add_origin : 
         <set_and_sync: 'blk_id pl_origin -> (unit,'t)m> -> 
         ('a,'buf,'blk_id,'t)plist_ops -> 
-        ('a,'buf,'blk_id,'t)plist_ops
-    (** Modify plist_ops to sync the origin block when hd/tl change *)
+        ('a,'buf,'blk_id,'t)plist_ops;
+      (** Modify plist_ops to sync the origin block when hd/tl change *)
+
+
+      (* Convenience *)
+
+      create : 'blk_id -> (<
+          plist_ref  : ('blk_id,'buf)plist ref;              
+          with_plist : (('blk_id,'buf)plist,'t)with_state;
+          plist_ops  : ('a,'buf,'blk_id,'t)plist_ops
+        >,'t)m;
+      (** NOTE no add_origin *)
+
+      restore : 'blk_id Pl_origin.t -> (<
+          plist_ref  : ('blk_id,'buf)plist ref;              
+          with_plist : (('blk_id,'buf)plist,'t)with_state;
+          plist_ops  : ('a,'buf,'blk_id,'t)plist_ops
+        >,'t)m;
+      (** NOTE no add_origin *)
 
     >
 >

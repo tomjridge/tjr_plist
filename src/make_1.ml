@@ -426,6 +426,8 @@ module Make_v1(S:S) = struct
   end (* B *)
 
   let plist_factory ~monad_ops : (_,_,_,_,_)plist_factory = 
+    let ( >>= ) = monad_ops.bind in
+    let return = monad_ops.return in
     object
       method monad_ops = monad_ops
       method buf_ops = buf_ops
@@ -441,20 +443,23 @@ module Make_v1(S:S) = struct
         end
         in
         let module B = B(S2) in
-        object
-          method init = B.init
-          method with_state = fun with_state -> 
-            let module C = B.C(struct let with_state = with_state end) in
-            C.plist_ops
-              
-          method with_ref = fun (pl:(_,_)plist) -> 
+        let init = B.init in
+        let with_ref = fun (pl:(_,_)plist) -> 
             let r = ref pl in
             let with_plist = Tjr_monad.with_imperative_ref ~monad_ops r in
             object
               method plist_ref=r
               method with_plist=with_plist
             end
-
+        in
+        let with_state = fun with_state -> 
+            let module C = B.C(struct let with_state = with_state end) in
+            C.plist_ops
+        in
+        object
+          method init = init
+          method with_state = with_state              
+          method with_ref = with_ref
           method add_origin=fun 
             (obj:<set_and_sync: 'blk_id Pl_origin.t ->(unit,'t)m>) plist_ops -> 
             let ( >>= ) = monad_ops.bind in
@@ -493,7 +498,27 @@ module Make_v1(S:S) = struct
               append pl >>= fun () -> 
               sync_origin () 
             in
-            { plist_ops with add; adv_hd; append }              
+            { plist_ops with add; adv_hd; append }                        
+
+          method create=fun blk_id -> 
+            init#create blk_id >>= fun plist -> 
+            with_ref plist |> fun o -> 
+            with_state o#with_plist |> fun plist_ops -> 
+            return @@ object
+              method plist_ref=o#plist_ref
+              method with_plist=o#with_plist
+              method plist_ops=plist_ops
+            end
+
+          method restore=fun o -> 
+            init#from_endpts o >>= fun plist -> 
+            with_ref plist |> fun o -> 
+            with_state o#with_plist |> fun plist_ops -> 
+            return @@ object
+              method plist_ref=o#plist_ref
+              method with_plist=o#with_plist
+              method plist_ops=plist_ops
+            end
         end
     end
 
