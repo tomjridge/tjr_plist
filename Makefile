@@ -32,3 +32,4 @@ promote_docs::
 # for auto-completion of Makefile target
 clean::
 	rm -f *.store
+	rm -f src/GEN.*

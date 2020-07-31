@@ -3,15 +3,6 @@
 (**
 
 {[
-type ('blk_id,'blk,'t) origin_factory = <
-  monad_ops :'t monad_ops;
-  with_: 
-    blk_dev_ops: ('blk_id,'blk,'t)blk_dev_ops -> 
-    blk_id : 'blk_id -> 
-    sync_blk_id : (unit -> (unit,'t)m) ->
-    < set_and_sync: 'blk_id pl_origin -> (unit,'t)m >
->
-
 type ('blk_id,'buf) plist = {
   hd      : 'blk_id;
   tl      : 'blk_id;
@@ -87,6 +78,38 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
 
     >
 >
+type ('a,'blk_id,'blk,'buf,'t) simple_plist_factory = <  
+  plist_factory: 
+    ('a,'blk_id,'blk,'buf,'t) plist_factory;
+
+  convert_to_simple_plist: 
+    freelist_ops : ('blk_id,'t) freelist_ops_af -> 
+    plist_ops    : ('a,'buf,'blk_id,'t) plist_ops -> 
+    ('a,'blk_id,'t) simple_plist_ops;
+
+  (* Convenience *)
+
+  with_ : 
+    blk_dev_ops : ('blk_id,'blk,'t)blk_dev_ops ->
+    barrier : (unit -> (unit,'t)m) -> 
+    freelist_ops: ('blk_id,'t)freelist_ops_af -> 
+    <
+
+      create: 'blk_id -> (<
+          plist_ref        : ('blk_id,'buf)plist ref;              
+          with_plist       : (('blk_id,'buf)plist,'t)with_state;
+          plist_ops        : ('a,'buf,'blk_id,'t)plist_ops;
+          simple_plist_ops : ('a,'blk_id,'t)simple_plist_ops;      
+        >,'t)m;
+
+      restore: 'blk_id Pl_origin.t -> (<
+          plist_ref        : ('blk_id,'buf)plist ref;              
+          with_plist       : (('blk_id,'buf)plist,'t)with_state;
+          plist_ops        : ('a,'buf,'blk_id,'t)plist_ops;
+          simple_plist_ops : ('a,'blk_id,'t)simple_plist_ops;      
+        >,'t)m;
+    >
+>
 
   type ('a,'blk_id,'blk,'buf) plist_marshal_info = {
     elt_mshlr     : ('a option,'buf)mshlr;
@@ -108,6 +131,14 @@ type ('a,'buf (* FIXME *),'blk_id, 't) plist_ops = {
 
   read_hd       : unit -> ('a list * 'blk_id option,'t)m;
   append        : ('blk_id,'buf) plist -> (unit,'t)m;
+}
+type ('a,'blk_id,'t) simple_plist_ops = {
+  add           : 'a -> (bool,'t)m;
+  (** Return value indicates whether we moved to a new block *)
+
+  sync_tl       : unit -> (unit,'t)m;
+  blk_len       : unit -> (int,'t)m;
+  get_origin    : unit -> ('blk_id pl_origin,'t)m;
 }
 
 type ('a,'blk_id,'blk,'buf,'t) simple_plist_factory = <  

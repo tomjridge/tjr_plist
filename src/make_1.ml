@@ -621,13 +621,13 @@ let pl_examples =
     method for_int : int plist_factory = int_plist_factory      
     method for_blk_id : Shared_ctxt.r plist_factory = r_plist_factory
     method for_int_int_kvop : (int,int)kvop plist_factory = int_int_kvop_plist_factory
-    method origin_factory:(_,_,_)Plist_intf.origin_factory = object
+(*    method origin_factory:(_,_,_)Plist_intf.origin_factory = object
       method monad_ops=monad_ops
       method with_=
         fun ~blk_dev_ops ~blk_id ~sync_blk_id -> 
         let x = origin_ops ~blk_dev_ops ~blk_id ~sync_blk_id in
         (x :> <set_and_sync: _ Plist_intf.Pl_origin.t -> (unit,'t)m>)
-    end
+    end*)
   end
 
 let _ = pl_examples

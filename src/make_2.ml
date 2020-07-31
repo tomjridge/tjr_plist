@@ -2,62 +2,8 @@
    freelist (so we don't have to closely track blk_ids) *)
 
 open Plist_intf
-open Pl_origin
+(* open Pl_origin *)
 
-(* $(CONVENTION("""for restricted types, append some indicator of what
-   the fields are; here, af ~ alloc+free; this is less confusing than
-   having a type with the same name in a different module """)) *)
-type ('blk_id,'t) freelist_ops_af = 
-  ('blk_id,'t)blk_allocator_ops = 
-  {
-    blk_alloc : (unit -> ('blk_id,'t)m);
-    blk_free  : ('blk_id -> (unit,'t)m);
-  }
-
-
-(* $(PIPE2SH("""sed -n '/type[ ].*simple_plist_ops = /,/^}/p' >GEN.simple_plist_ops.ml_""")) *)
-type ('a,'blk_id,'t) simple_plist_ops = {
-  add           : 'a -> (bool,'t)m;
-  (** Return value indicates whether we moved to a new block *)
-
-  sync_tl       : unit -> (unit,'t)m;
-  blk_len       : unit -> (int,'t)m;
-  get_origin    : unit -> ('blk_id pl_origin,'t)m;
-}
-
-(* $(PIPE2SH("""sed -n '/type[ ].*simple_plist_factory = /,/^>/p' >GEN.simple_plist_factory.ml_""")) *)
-type ('a,'blk_id,'blk,'buf,'t) simple_plist_factory = <  
-  plist_factory: 
-    ('a,'blk_id,'blk,'buf,'t) plist_factory;
-
-  convert_to_simple_plist: 
-    freelist_ops : ('blk_id,'t) freelist_ops_af -> 
-    plist_ops    : ('a,'buf,'blk_id,'t) plist_ops -> 
-    ('a,'blk_id,'t) simple_plist_ops;
-
-  (* Convenience *)
-
-  with_ : 
-    blk_dev_ops : ('blk_id,'blk,'t)blk_dev_ops ->
-    barrier : (unit -> (unit,'t)m) -> 
-    freelist_ops: ('blk_id,'t)freelist_ops_af -> 
-    <
-
-      create: 'blk_id -> (<
-          plist_ref        : ('blk_id,'buf)plist ref;              
-          with_plist       : (('blk_id,'buf)plist,'t)with_state;
-          plist_ops        : ('a,'buf,'blk_id,'t)plist_ops;
-          simple_plist_ops : ('a,'blk_id,'t)simple_plist_ops;      
-        >,'t)m;
-
-      restore: 'blk_id Pl_origin.t -> (<
-          plist_ref        : ('blk_id,'buf)plist ref;              
-          with_plist       : (('blk_id,'buf)plist,'t)with_state;
-          plist_ops        : ('a,'buf,'blk_id,'t)plist_ops;
-          simple_plist_ops : ('a,'blk_id,'t)simple_plist_ops;      
-        >,'t)m;
-    >
->
 
 (** {2 Plist_ops_2 from plist_ops} *)
 
