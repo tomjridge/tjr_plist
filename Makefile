@@ -4,11 +4,9 @@ default:
 -include Makefile.ocaml
 
 all::
-	$(MAKE) copy_executables
-
-# we need to copy the executables into this directory
-copy_executables:
-#	cp _build/default_test` ${CURDIR}
+# FIXME uncomment these after src-example resurrected
+#	dune build bin/plist_test.exe
+#	cp _build/default/plist_test.exe .
 
 # run_plist_test:
 # 	rm -f plist_on_disk.store
