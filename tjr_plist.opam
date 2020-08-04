@@ -4,7 +4,7 @@ synopsis: "A persistent (on-disk) list"
 maintainer: ["Tom Ridge <tom.j.ridge@googlemail.com>"]
 authors: ["Tom Ridge <tom.j.ridge@googlemail.com>"]
 homepage: "https://github.com/tomjridge/tjr_plist"
-doc: "https://tomjridge.github.io/tjr_plist"
+doc: "https://tomjridge.github.io/ocamldocs/"
 bug-reports: "https://github.com/tomjridge/tjr_plist/issues"
 depends: ["ocamlfind" "dune" "tjr_fs_shared" "ppx_jane"]
 build: [

@@ -1,9 +1,10 @@
 (env
   (_ (flags (:standard -open Tjr_lib -open Tjr_monad -open Tjr_fs_shared -open Tjr_plist))))
 
-(executable
- (public_name "plist_test")
- (package tjr_plist)
- (modules Plist_test)
- (libraries tjr_plist_examples)
-)
+;; FIXME resurrect this; how best to include tests? in a different package? in the orig package?
+;; (executable
+;;  (public_name "plist_test")
+;;  (package tjr_plist)
+;;  (modules Plist_test)
+;;  (libraries tjr_plist_examples)
+;; )

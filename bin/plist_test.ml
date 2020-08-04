@@ -1,3 +1,5 @@
+(* FIXME resurrect 
+
 open Tjr_plist_examples
 open Tjr_plist_examples.Plist_examples
 
@@ -38,3 +40,4 @@ let _ =
   Lwt_main.run ( 
     task |> Tjr_monad.With_lwt.to_lwt
   )
+*)
