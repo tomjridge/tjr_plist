@@ -101,6 +101,7 @@ type ('a,'blk_id) adv_hd = {
 
 type 'a or_error = ('a,unit) result
 
+module Plist_ops = struct
 (** plist operations which require the plist state from the monad *)
 (* $(PIPE2SH("""sed -n '/type[ ].*plist_ops/,/^}/p' >GEN.plist_ops.ml_""")) *)
 type ('a,'buf (* FIXME *),'blk_id, 't) plist_ops = {
@@ -148,7 +149,8 @@ type ('a,'buf (* FIXME *),'blk_id, 't) plist_ops = {
   space leak
 
 *)
-
+end
+include Plist_ops
 
 
 module Plist_marshal_info = struct
@@ -268,7 +270,7 @@ type ('blk_id,'t) freelist_ops_af =
     blk_free  : ('blk_id -> (unit,'t)m);
   }
 
-
+module Simple_plist_ops = struct
 (* $(PIPE2SH("""sed -n '/type[ ].*simple_plist_ops = /,/^}/p' >GEN.simple_plist_ops.ml_""")) *)
 type ('a,'blk_id,'t) simple_plist_ops = {
   add           : 'a -> (bool,'t)m;
@@ -278,7 +280,8 @@ type ('a,'blk_id,'t) simple_plist_ops = {
   blk_len       : unit -> (int,'t)m;
   get_origin    : unit -> ('blk_id pl_origin,'t)m;
 }
-
+end
+include Simple_plist_ops
 
 (* $(PIPE2SH("""sed -n '/type[ ].*simple_plist_factory = /,/^>/p' >GEN.simple_plist_factory.ml_""")) *)
 type ('a,'blk_id,'blk,'buf,'t) simple_plist_factory = <  

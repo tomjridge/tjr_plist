@@ -52,6 +52,7 @@ module Plist_intf = Plist_intf
 
 module Pl_origin = Plist_intf.Pl_origin
 
+module Plist_ops = Plist_intf.Plist_ops
 type ('a,'buf, 'blk_id, 't) plist_ops =
   ('a,'buf, 'blk_id, 't) Plist_intf.plist_ops
 
@@ -64,7 +65,9 @@ type ('blk_id,'t) freelist_ops_af =
 type ('a,'blk_id,'blk,'buf,'t) simple_plist_factory
   = ('a,'blk_id,'blk,'buf,'t) Plist_intf.simple_plist_factory
 
-type ('a,'blk_id,'t) simple_plist_ops = ('a,'blk_id,'t) Plist_intf.simple_plist_ops
+module Simple_plist_ops = Plist_intf.Simple_plist_ops
+type ('a,'blk_id,'t) simple_plist_ops = 
+  ('a,'blk_id,'t) Plist_intf.simple_plist_ops
 
 module Make_1 = Make_1
 
