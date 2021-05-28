@@ -49,7 +49,7 @@ module type S = sig
   val blk_ops:(blk,buf) blk_ops
 
   type a
-  val plist_marshal_info: (a,blk_id,blk,buf)plist_marshal_info
+  val plist_marshal_info: (a,blk_id,buf)plist_marshal_info
 end
 
 module type T = sig

@@ -155,7 +155,7 @@ include Plist_ops
 
 module Plist_marshal_info = struct
   (* $(PIPE2SH("""sed -n '/type[ ].*plist_marshal_info/,/}/p' >GEN.plist_marshal_info.ml_""")) *)
-  type ('a,'blk_id,'blk,'buf) plist_marshal_info = {
+  type ('a,'blk_id,'buf) plist_marshal_info = {
     elt_mshlr     : ('a option,'buf)mshlr;
     blk_id_mshlr  : ('blk_id option,'buf)mshlr;
   }
@@ -179,7 +179,7 @@ type ('a,'blk_id,'blk,'buf,'t) plist_factory = <
   monad_ops          :'t monad_ops;
   buf_ops            :'buf buf_ops;
   blk_ops            : ('blk,'buf) blk_ops;
-  plist_marshal_info : ('a,'blk_id,'blk,'buf) plist_marshal_info;
+  plist_marshal_info : ('a,'blk_id,'buf) plist_marshal_info;
   plist_marshal_ops  : ('a,'blk_id,'blk) plist_marshal_ops; 
   with_blk_dev_ops   :  
     blk_dev_ops : ('blk_id,'blk,'t)blk_dev_ops ->
